@@ -33,6 +33,7 @@
     button, input { font: inherit; }
     button { cursor: pointer; }
     button:disabled { opacity: .55; cursor: wait; }
+    a { color: var(--green); }
 
     .app {
       display: flex;
@@ -223,7 +224,7 @@
 
     .user .avatar { background: var(--green); color: white; }
 
-    .message-content { max-width: min(80%, 680px); }
+    .message-content { max-width: min(80%, 680px); min-width: 0; }
     .message-label { font-size: 11px; color: var(--muted); margin: 2px 0 6px; }
 
     .bubble {
@@ -253,6 +254,89 @@
       color: var(--muted);
       font-size: 12px;
     }
+
+    /* Campus location card */
+    .location-card {
+      margin-top: 12px;
+      width: 100%;
+      max-width: 620px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: white;
+    }
+
+    .location-heading {
+      padding: 15px 16px 10px;
+    }
+
+    .location-heading h3 {
+      margin: 0 0 5px;
+      font-size: 17px;
+      color: var(--green-dark);
+    }
+
+    .location-campus {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .location-map {
+      display: block;
+      width: 100%;
+      height: 260px;
+      border: 0;
+      background: var(--green-light);
+    }
+
+    .map-fallback {
+      padding: 16px;
+      background: var(--green-light);
+      line-height: 1.5;
+      font-size: 13px;
+    }
+
+    .location-details {
+      padding: 14px 16px 16px;
+    }
+
+    .location-details p {
+      margin: 0 0 12px;
+      line-height: 1.6;
+      font-size: 14px;
+      overflow-wrap: anywhere;
+    }
+
+    .verification-notice {
+      padding: 10px 12px;
+      margin: 10px 0 14px;
+      background: #fff8e7;
+      border: 1px solid #f0dfb5;
+      border-radius: 9px;
+      color: #76571b;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .verification-notice.verified {
+      background: var(--green-light);
+      border-color: #c8e2d1;
+      color: var(--green-dark);
+    }
+
+    .map-link {
+      display: inline-block;
+      padding: 10px 13px;
+      border-radius: 9px;
+      background: var(--green);
+      color: white;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 13px;
+    }
+
+    .map-link:hover { background: var(--green-dark); }
 
     .composer-area {
       padding: 14px 24px 18px;
@@ -303,12 +387,9 @@
       margin-top: 10px;
     }
 
-    .dashboard {
-      max-width: 850px;
-      margin: 0 auto;
-    }
-
+    .dashboard { max-width: 850px; margin: 0 auto; }
     .dashboard h2 { margin-top: 0; }
+
     .dashboard-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -352,6 +433,7 @@
       .send { padding: 11px 12px; }
       .composer { gap: 5px; }
       .hint { line-height: 1.5; }
+      .location-map { height: 220px; }
     }
 
     @media (max-width: 390px) {
@@ -511,9 +593,11 @@
     document.getElementById("composer-area").hidden = false;
     pageTitle.textContent = "Campus Chat";
     pageSubtitle.textContent = "Ask questions about university life";
+
     document.querySelectorAll("[data-view]").forEach(button => {
       button.classList.toggle("active", button.dataset.view === "chat");
     });
+
     sidebar.classList.remove("open");
   }
 
@@ -524,13 +608,89 @@
     document.getElementById("composer-area").hidden = true;
     pageTitle.textContent = "Dashboard";
     pageSubtitle.textContent = "Explore campus information";
+
     document.querySelectorAll("[data-view]").forEach(button => {
       button.classList.toggle("active", button.dataset.view === "dashboard");
     });
+
     sidebar.classList.remove("open");
   }
 
-  function addMessage(text, kind) {
+  function addLocationCard(content, location) {
+    if (!location || typeof location !== "object") return;
+
+    const card = document.createElement("article");
+    card.className = "location-card";
+
+    const heading = document.createElement("div");
+    heading.className = "location-heading";
+
+    const title = document.createElement("h3");
+    title.textContent = "📍 " + (location.name || "Campus facility");
+
+    const campus = document.createElement("p");
+    campus.className = "location-campus";
+    campus.textContent = location.campus || "Great Zimbabwe University";
+
+    heading.append(title, campus);
+    card.appendChild(heading);
+
+    const mapQuery = location.map_query || location.name || "Great Zimbabwe University";
+    const embedUrl =
+      "https://maps.google.com/maps?q=" +
+      encodeURIComponent(mapQuery) +
+      "&output=embed";
+
+    const map = document.createElement("iframe");
+    map.className = "location-map";
+    map.title = "Map search for " + (location.name || "campus facility");
+    map.loading = "lazy";
+    map.referrerPolicy = "no-referrer-when-downgrade";
+    map.setAttribute("allowfullscreen", "");
+    map.src = embedUrl;
+    map.addEventListener("error", () => {
+      map.hidden = true;
+    });
+
+    card.appendChild(map);
+
+    const details = document.createElement("div");
+    details.className = "location-details";
+
+    const description = document.createElement("p");
+    description.textContent =
+      location.description || "Please confirm the facility location with university staff.";
+    details.appendChild(description);
+
+    const notice = document.createElement("div");
+    notice.className = "verification-notice";
+
+    if (location.verified === true) {
+      notice.classList.add("verified");
+      notice.textContent = "The directory marks this location as verified.";
+    } else {
+      notice.textContent =
+        "The exact facility location has not been verified. Confirm the location with university staff before travelling.";
+    }
+
+    details.appendChild(notice);
+
+    const mapLink = document.createElement("a");
+    mapLink.className = "map-link";
+    mapLink.href =
+      location.map_url ||
+      ("https://www.google.com/maps/search/?api=1&query=" +
+        encodeURIComponent(mapQuery));
+    mapLink.target = "_blank";
+    mapLink.rel = "noopener noreferrer";
+    mapLink.textContent = "Open Google Maps ↗";
+
+    details.appendChild(mapLink);
+    card.appendChild(details);
+    content.appendChild(card);
+  }
+
+  function addMessage(text, kind, locationData = null) {
     const row = document.createElement("div");
     row.className = "message " + kind;
 
@@ -552,6 +712,8 @@
     content.append(label, bubble);
 
     if (kind === "bot") {
+      addLocationCard(content, locationData);
+
       const actions = document.createElement("div");
       actions.className = "message-actions";
 
@@ -617,17 +779,26 @@
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.response || "Request failed");
+
+      if (!response.ok) {
+        throw new Error(data.response || "Request failed");
+      }
 
       typing.remove();
+
       const answer = data.response || "No answer was returned.";
-      addMessage(answer, "bot");
+      addMessage(answer, "bot", data.location || null);
       status.textContent = "Ready";
 
       if (readAloud) speak(answer);
     } catch (error) {
       typing.remove();
-      addMessage("I couldn't connect to the chatbot server. Please try again. If the problem continues, the service may be waking up or temporarily unavailable.", "bot");
+
+      addMessage(
+        "I couldn't connect to the chatbot server. Please try again. If the problem continues, the service may be waking up or temporarily unavailable.",
+        "bot"
+      );
+
       status.textContent = "Connection issue";
     } finally {
       busy = false;
@@ -682,17 +853,20 @@
   readToggle.addEventListener("click", () => {
     readAloud = !readAloud;
     readToggle.setAttribute("aria-pressed", String(readAloud));
+
     readToggle.innerHTML = readAloud
       ? '🔊 <span class="long-label">Read aloud: On</span>'
       : '🔊 <span class="long-label">Read aloud</span>';
 
     if (!readAloud) stopSpeaking();
+
     hint.textContent = readAloud
       ? "Read-aloud is on for new answers. You can also read individual answers."
       : "Check important details with official GZU sources.";
   });
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (SpeechRecognition) {
     recognition = new SpeechRecognition();
@@ -713,7 +887,8 @@
 
     recognition.onerror = () => {
       status.textContent = "Microphone unavailable";
-      hint.textContent = "Check your browser microphone permission and try again.";
+      hint.textContent =
+        "Check your browser microphone permission and try again.";
     };
 
     recognition.onend = () => {
@@ -722,15 +897,19 @@
     };
 
     micButton.addEventListener("click", () => {
-      try { recognition.start(); }
-      catch (error) {
-        hint.textContent = "The microphone is already active. Please wait and try again.";
+      try {
+        recognition.start();
+      } catch (error) {
+        hint.textContent =
+          "The microphone is already active. Please wait and try again.";
       }
     });
   } else {
     micButton.addEventListener("click", () => {
-      hint.textContent = "Speech recognition isn't supported by this browser. Try a browser that supports web speech recognition, or type your question.";
+      hint.textContent =
+        "Speech recognition isn't supported by this browser. Try a browser that supports web speech recognition, or type your question.";
     });
+
     micButton.title = "Speech recognition not supported by this browser";
   }
 
@@ -747,4 +926,3 @@
 </script>
 </body>
 </html>
-
