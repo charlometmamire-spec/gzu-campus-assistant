@@ -1,29 +1,80 @@
+
 {
-  "Mashava Campus": {
+  "TLC": {
     "aliases": [
-      "mashava",
       "tlc",
       "teaching and learning centre",
-      "teaching and learning center",
-      "chemberi",
+      "teaching and learning center"
+    ],
+    "description": "Teaching and learning facilities at Mashava Campus. Confirm the exact building and room with campus staff.",
+    "map_query": "Great Zimbabwe University Mashava Campus Teaching and Learning Centre",
+    "verified": false
+  },
+  "Mashava Campus Library": {
+    "aliases": [
+      "mashava campus library",
+      "mashava library",
+      "library at mashava",
+      "chemberi centre library",
+      "chemberi center library"
+    ],
+    "description": "The library is reported in the current chatbot data to be at Chemberi Centre. Confirm this location with the university before travelling.",
+    "map_query": "Great Zimbabwe University Mashava Campus Library Chemberi Centre",
+    "verified": false
+  },
+  "Student Village": {
+    "aliases": [
       "student village",
-      "hostel",
-      "hostels",
+      "student accommodation village",
+      "mashava student village"
+    ],
+    "description": "Student residential accommodation associated with Mashava Campus. Confirm the exact location and accommodation arrangements with the university.",
+    "map_query": "Great Zimbabwe University Mashava Campus Student Village",
+    "verified": false
+  },
+  "Medical Centre": {
+    "aliases": [
       "medical centre",
       "medical center",
-      "dining hall",
-      "mashava hall",
-      "chemberi hall",
-      "clubhouse"
+      "campus clinic",
+      "student clinic"
     ],
-    "description": "Mashava Campus facilities. Confirm exact room locations with campus staff.",
-    "map_query": "Great Zimbabwe University Mashava Campus",
+    "description": "The exact location and operating arrangements need confirmation from Mashava Campus staff.",
+    "map_query": "Great Zimbabwe University Mashava Campus Medical Centre",
+    "verified": false
+  },
+  "Dining Hall": {
+    "aliases": [
+      "dining hall",
+      "mashava dining hall",
+      "student dining hall"
+    ],
+    "description": "The exact location of the dining hall should be confirmed with Mashava Campus staff.",
+    "map_query": "Great Zimbabwe University Mashava Campus Dining Hall",
+    "verified": false
+  },
+  "Chemberi Hall": {
+    "aliases": [
+      "chemberi hall",
+      "mashava hall"
+    ],
+    "description": "Confirm the hall's exact location and current use with Mashava Campus staff.",
+    "map_query": "Great Zimbabwe University Mashava Campus Chemberi Hall",
+    "verified": false
+  },
+  "Clubhouse": {
+    "aliases": [
+      "clubhouse",
+      "campus clubhouse"
+    ],
+    "description": "Confirm the clubhouse location and access arrangements with Mashava Campus staff.",
+    "map_query": "Great Zimbabwe University Mashava Campus Clubhouse",
     "verified": false
   },
   "Main Campus": {
     "aliases": [
       "main campus",
-      "administration",
+      "main campus administration",
       "administrative offices"
     ],
     "description": "Main Campus administrative facilities. Confirm the specific office before travelling.",
@@ -32,41 +83,46 @@
   },
   "Mucheke Campus": {
     "aliases": [
+      "mucheke campus",
       "mucheke"
     ],
-    "description": "Mucheke Campus. Confirm the specific facility and its current location with the university.",
+    "description": "Confirm the specific facility and its current location with the university.",
     "map_query": "Great Zimbabwe University Mucheke Campus",
     "verified": false
   },
   "City Campus Library": {
     "aliases": [
-      "city campus",
+      "city campus library",
       "city library",
-      "bradburn",
+      "bradburn street library",
       "bradburn street"
     ],
-    "description": "City Campus Library. Confirm current opening hours and access arrangements with GZU.",
+    "description": "Confirm current opening hours, access arrangements and the exact location with GZU.",
     "map_query": "Great Zimbabwe University City Campus Library Bradburn Street",
     "verified": false
   },
   "Herbert Chitepo Law School Library": {
     "aliases": [
+      "herbert chitepo law school library",
       "herbert chitepo",
-      "law school",
+      "law school library",
       "law library"
     ],
-    "description": "Herbert Chitepo Law School Library. Confirm access and exact location with GZU.",
+    "description": "Confirm access and the exact location with GZU.",
     "map_query": "Great Zimbabwe University Herbert Chitepo Law School Library",
     "verified": false
   },
   "Graduate School Resource Centre": {
     "aliases": [
-      "graduate school",
+      "graduate school resource centre",
+      "graduate school resource center",
       "resource centre",
       "resource center"
     ],
-    "description": "Graduate School Resource Centre. Confirm the exact location with the university.",
+    "description": "Confirm the exact location with the university.",
     "map_query": "Great Zimbabwe University Graduate School Resource Centre",
     "verified": false
   }
 }
+
+    
