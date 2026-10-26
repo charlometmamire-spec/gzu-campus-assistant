@@ -1,0 +1,72 @@
+{
+  "Mashava Campus": {
+    "aliases": [
+      "mashava",
+      "tlc",
+      "teaching and learning centre",
+      "teaching and learning center",
+      "chemberi",
+      "student village",
+      "hostel",
+      "hostels",
+      "medical centre",
+      "medical center",
+      "dining hall",
+      "mashava hall",
+      "chemberi hall",
+      "clubhouse"
+    ],
+    "description": "Mashava Campus facilities. Confirm exact room locations with campus staff.",
+    "map_query": "Great Zimbabwe University Mashava Campus",
+    "verified": false
+  },
+  "Main Campus": {
+    "aliases": [
+      "main campus",
+      "administration",
+      "administrative offices"
+    ],
+    "description": "Main Campus administrative facilities. Confirm the specific office before travelling.",
+    "map_query": "Great Zimbabwe University Main Campus Zimbabwe",
+    "verified": false
+  },
+  "Mucheke Campus": {
+    "aliases": [
+      "mucheke"
+    ],
+    "description": "Mucheke Campus. Confirm the specific facility and its current location with the university.",
+    "map_query": "Great Zimbabwe University Mucheke Campus",
+    "verified": false
+  },
+  "City Campus Library": {
+    "aliases": [
+      "city campus",
+      "city library",
+      "bradburn",
+      "bradburn street"
+    ],
+    "description": "City Campus Library. Confirm current opening hours and access arrangements with GZU.",
+    "map_query": "Great Zimbabwe University City Campus Library Bradburn Street",
+    "verified": false
+  },
+  "Herbert Chitepo Law School Library": {
+    "aliases": [
+      "herbert chitepo",
+      "law school",
+      "law library"
+    ],
+    "description": "Herbert Chitepo Law School Library. Confirm access and exact location with GZU.",
+    "map_query": "Great Zimbabwe University Herbert Chitepo Law School Library",
+    "verified": false
+  },
+  "Graduate School Resource Centre": {
+    "aliases": [
+      "graduate school",
+      "resource centre",
+      "resource center"
+    ],
+    "description": "Graduate School Resource Centre. Confirm the exact location with the university.",
+    "map_query": "Great Zimbabwe University Graduate School Resource Centre",
+    "verified": false
+  }
+}

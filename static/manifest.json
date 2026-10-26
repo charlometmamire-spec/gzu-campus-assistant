@@ -1,0 +1,11 @@
+{
+  "name": "GZU Campus Assistant",
+  "short_name": "GZU Assistant",
+  "description": "Campus information assistant for Great Zimbabwe University.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f8f5",
+  "theme_color": "#176b45",
+  "icons": []
+}
