@@ -237,6 +237,31 @@
       overflow-wrap: anywhere;
     }
 
+    /* Clickable links in chatbot answers */
+    .bubble a {
+      color: var(--green);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .bot .bubble a:hover {
+      color: var(--green-dark);
+    }
+
+    .user .bubble a {
+      color: white;
+    }
+
+    .message.user .bubble a {
+      color: white;
+    }
+
+    .message.bot .bubble a {
+      color: var(--green);
+    }
+
     .user .bubble {
       background: var(--green);
       color: white;
@@ -475,7 +500,7 @@
       <button class="nav-button" id="clear-chat">🧹 Clear conversation</button>
       <div class="small-note">
         Your campus information companion.<br>
-        <a href="https://www.gzu.ac.zw/" target="_blank" rel="noopener">Official GZU website ↗</a>
+        <a href="https://www.gzu.ac.zw/" target="_blank" rel="noopener noreferrer">Official GZU website ↗</a>
       </div>
     </div>
   </aside>
@@ -483,7 +508,7 @@
   <main class="main">
     <header class="topbar">
       <div style="display:flex;align-items:center;gap:12px">
-        <button class="tool-button mobile-menu" id="menu-button" aria-label="Open menu">☰</button>
+        <button class="tool-button mobile-menu" type="button" id="menu-button" aria-label="Open menu">☰</button>
         <div>
           <h2 id="page-title">Campus Chat</h2>
           <p id="page-subtitle">Ask questions about university life</p>
@@ -539,8 +564,8 @@
           </article>
           <article class="dash-card">
             <h3>🌐 Official information</h3>
-            <p>Visit the official university website for verified announcements.</p>
-            <a href="https://www.gzu.ac.zw/" target="_blank" rel="noopener">Open GZU website ↗</a>
+            <p>Visit the official university website for university announcements.</p>
+            <a href="https://www.gzu.ac.zw/" target="_blank" rel="noopener noreferrer">Open GZU website ↗</a>
           </article>
         </div>
       </div>
@@ -690,6 +715,50 @@
     content.appendChild(card);
   }
 
+  // Automatically turn URLs in answers into clickable links.
+  // Uses text nodes for all other text, so chatbot content is not treated as HTML.
+  function renderAnswer(bubble, text) {
+    const answer = String(text || "");
+    const urlPattern = /https?:\/\/[^\s<>"']+/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = urlPattern.exec(answer)) !== null) {
+      bubble.appendChild(
+        document.createTextNode(answer.slice(lastIndex, match.index))
+      );
+
+      let url = match[0];
+      let punctuation = "";
+
+      // Keep punctuation such as a final full stop outside the link.
+      while (/[.,!?;:)]+$/.test(url)) {
+        punctuation = url.slice(-1) + punctuation;
+        url = url.slice(0, -1);
+      }
+
+      if (url) {
+        const link = document.createElement("a");
+        link.href = url;
+        link.textContent = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.style.overflowWrap = "anywhere";
+        bubble.appendChild(link);
+      }
+
+      if (punctuation) {
+        bubble.appendChild(document.createTextNode(punctuation));
+      }
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    bubble.appendChild(
+      document.createTextNode(answer.slice(lastIndex))
+    );
+  }
+
   function addMessage(text, kind, locationData = null) {
     const row = document.createElement("div");
     row.className = "message " + kind;
@@ -707,7 +776,7 @@
 
     const bubble = document.createElement("div");
     bubble.className = "bubble";
-    bubble.textContent = text;
+    renderAnswer(bubble, text);
 
     content.append(label, bubble);
 
