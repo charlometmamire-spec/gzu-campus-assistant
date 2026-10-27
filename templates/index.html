@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -24,6 +25,7 @@
 
     body {
       margin: 0;
+      min-height: 100vh;
       height: 100vh;
       color: var(--text);
       background: var(--page);
@@ -49,6 +51,7 @@
       display: flex;
       flex-direction: column;
       gap: 18px;
+      overflow-y: auto;
     }
 
     .brand {
@@ -243,12 +246,6 @@
       border-radius: 15px 4px 15px 15px;
     }
 
-    .bubble a { color: #176b45; text-decoration: underline; overflow-wrap: anywhere; }
-    .message.user .bubble a { color: #ffffff; }
-    .choice-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-    .choice-button { border: 1px solid #b8d7c4; background: #f2faf5; color: #155d3d; border-radius: 9px; padding: 8px 11px; cursor: pointer; font: inherit; text-align: left; }
-    .choice-button:hover { background: #e4f3e9; }
-
     .message-actions { display: flex; gap: 6px; margin-top: 7px; }
 
     .mini-button {
@@ -292,13 +289,6 @@
       background: var(--green-light);
     }
 
-    .map-fallback {
-      padding: 16px;
-      background: var(--green-light);
-      line-height: 1.5;
-      font-size: 13px;
-    }
-
     .location-details { padding: 14px 16px 16px; }
 
     .location-details p {
@@ -337,6 +327,57 @@
     }
 
     .map-link:hover { background: var(--green-dark); }
+
+    .compass-panel {
+      max-width: 760px;
+      margin: 22px auto;
+      padding: 22px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: white;
+      text-align: center;
+    }
+
+    .compass-icon {
+      width: 68px;
+      height: 68px;
+      margin: 0 auto 12px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--green-light);
+      font-size: 36px;
+    }
+
+    .compass-panel h2 { margin: 8px 0; }
+    .compass-panel p {
+      color: var(--muted);
+      line-height: 1.65;
+      margin: 8px auto 16px;
+      max-width: 570px;
+    }
+
+    .destination-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      max-width: 600px;
+      margin: 18px auto 0;
+    }
+
+    .destination-button {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+      color: var(--text);
+      text-align: left;
+    }
+
+    .destination-button:hover {
+      background: var(--green-light);
+      border-color: var(--green);
+    }
 
     .composer-area {
       padding: 14px 24px 18px;
@@ -427,7 +468,9 @@
       .topbar { padding: 13px 15px; }
       .view { padding: 16px 12px; }
       .composer-area { padding: 10px; }
-      .suggestions, .dashboard-grid { grid-template-columns: 1fr; }
+      .suggestions, .dashboard-grid, .destination-options {
+        grid-template-columns: 1fr;
+      }
       .message-content { max-width: 86%; }
       .tool-button { padding: 10px; }
       .send { padding: 11px 12px; }
@@ -461,6 +504,7 @@
       <p class="nav-heading">Workspace</p>
       <button class="nav-button active" data-view="chat">💬 Campus Chat</button>
       <button class="nav-button" data-view="dashboard">▦ Dashboard</button>
+      <button class="nav-button" id="compass-button">🧭 Compass Location</button>
     </section>
 
     <section>
@@ -519,7 +563,42 @@
           <strong>☎ Contact GZU</strong>
           <span>Find official university contact information.</span>
         </button>
+        <button class="suggestion" data-question="What is Great Zimbabwe University?">
+          <strong>🏛️ About GZU</strong>
+          <span>Learn about the university.</span>
+        </button>
+        <button class="suggestion" data-question="Show me GZU University">
+          <strong>🖼️ Explore GZU</strong>
+          <span>Open official university information and available photos.</span>
+        </button>
+        <button class="suggestion" data-question="What are the student conduct rules at GZU?">
+          <strong>📘 Conduct information</strong>
+          <span>Find official rules and regulations.</span>
+        </button>
       </div>
+
+      <section id="compass-panel" class="compass-panel" hidden>
+        <div class="compass-icon">🧭</div>
+        <h2>GZU Compass Location</h2>
+        <p>
+          Welcome! I will help you find your way around Great Zimbabwe
+          University. Where would you like to go today?
+        </p>
+        <p>
+          Choose a destination below, or type the name of the building or
+          facility in the message box. I will check the campus directory
+          and show a map when a location match is available.
+        </p>
+
+        <div class="destination-options">
+          <button class="destination-button" data-destination="Where is TLC?">📍 TLC</button>
+          <button class="destination-button" data-destination="Where is Mashava Campus Library?">📚 Mashava Campus Library</button>
+          <button class="destination-button" data-destination="Where is Chemberi Hall?">🏛️ Chemberi Hall</button>
+          <button class="destination-button" data-destination="Where is the Student Village?">🏠 Student Village</button>
+          <button class="destination-button" data-destination="Where is the Dining Hall?">🍽️ Dining Hall</button>
+          <button class="destination-button" data-destination="Where is the Medical Centre?">🩺 Medical Centre</button>
+        </div>
+      </section>
 
       <div id="dashboard" class="dashboard" hidden>
         <h2>Your campus dashboard</h2>
@@ -573,6 +652,7 @@
   const welcome = document.getElementById("welcome");
   const suggestions = document.getElementById("suggestions");
   const dashboard = document.getElementById("dashboard");
+  const compassPanel = document.getElementById("compass-panel");
   const view = document.getElementById("view");
   const sidebar = document.getElementById("sidebar");
   const pageTitle = document.getElementById("page-title");
@@ -580,35 +660,43 @@
   const micButton = document.getElementById("mic-button");
   const readToggle = document.getElementById("read-toggle");
   const hint = document.getElementById("hint");
+  const composerArea = document.getElementById("composer-area");
 
   let readAloud = false;
   let recognition = null;
   let busy = false;
+  let compassMode = false;
 
   function scrollToBottom() {
     view.scrollTop = view.scrollHeight;
   }
 
   function showChatView() {
+    compassMode = false;
     dashboard.hidden = true;
+    compassPanel.hidden = true;
     welcome.hidden = messages.children.length > 0;
     suggestions.hidden = messages.children.length > 0;
-    document.getElementById("composer-area").hidden = false;
+    composerArea.hidden = false;
     pageTitle.textContent = "Campus Chat";
     pageSubtitle.textContent = "Ask questions about university life";
+    input.placeholder = "Ask anything about GZU...";
 
     document.querySelectorAll("[data-view]").forEach(button => {
       button.classList.toggle("active", button.dataset.view === "chat");
     });
 
+    document.getElementById("compass-button").classList.remove("active");
     sidebar.classList.remove("open");
   }
 
   function showDashboard() {
+    compassMode = false;
     welcome.hidden = true;
     suggestions.hidden = true;
+    compassPanel.hidden = true;
     dashboard.hidden = false;
-    document.getElementById("composer-area").hidden = true;
+    composerArea.hidden = true;
     pageTitle.textContent = "Dashboard";
     pageSubtitle.textContent = "Explore campus information";
 
@@ -616,7 +704,36 @@
       button.classList.toggle("active", button.dataset.view === "dashboard");
     });
 
+    document.getElementById("compass-button").classList.remove("active");
     sidebar.classList.remove("open");
+  }
+
+  function showCompassLocation() {
+    stopSpeaking();
+    compassMode = true;
+    dashboard.hidden = true;
+    welcome.hidden = true;
+    suggestions.hidden = true;
+    compassPanel.hidden = false;
+    composerArea.hidden = false;
+
+    pageTitle.textContent = "Compass Location";
+    pageSubtitle.textContent = "Find a campus building or facility";
+    input.placeholder = "Where would you like to go?";
+
+    document.querySelectorAll("[data-view]").forEach(button => {
+      button.classList.remove("active");
+    });
+
+    document.getElementById("compass-button").classList.add("active");
+    sidebar.classList.remove("open");
+
+    hint.textContent =
+      "Choose a destination or type the place you want to find.";
+
+    status.textContent = "Compass Location ready";
+    scrollToBottom();
+    input.focus();
   }
 
   function addLocationCard(content, location) {
@@ -651,6 +768,7 @@
     map.referrerPolicy = "no-referrer-when-downgrade";
     map.setAttribute("allowfullscreen", "");
     map.src = embedUrl;
+
     map.addEventListener("error", () => {
       map.hidden = true;
     });
@@ -662,7 +780,8 @@
 
     const description = document.createElement("p");
     description.textContent =
-      location.description || "Please confirm the facility location with university staff.";
+      location.description ||
+      "Please confirm the facility location with university staff.";
     details.appendChild(description);
 
     const notice = document.createElement("div");
@@ -693,77 +812,7 @@
     content.appendChild(card);
   }
 
-  function renderSafeText(container, text) {
-    // Build links using DOM nodes only; never inject response text as HTML.
-    const urlPattern = /https?:\/\/[^\s<>()"']+/gi;
-    const source = String(text || "");
-    let cursor = 0;
-    let match;
-
-    while ((match = urlPattern.exec(source)) !== null) {
-      if (match.index > cursor) {
-        container.appendChild(document.createTextNode(source.slice(cursor, match.index)));
-      }
-
-      let url = match[0];
-      let trailing = "";
-
-      while (/[.,!?;:]$/.test(url)) {
-        trailing = url.slice(-1) + trailing;
-        url = url.slice(0, -1);
-      }
-
-      try {
-        const parsed = new URL(url);
-
-        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-          throw new Error("Unsafe URL");
-        }
-
-        const link = document.createElement("a");
-        link.href = parsed.href;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.textContent = url;
-        container.appendChild(link);
-
-        if (trailing) {
-          container.appendChild(document.createTextNode(trailing));
-        }
-      } catch (error) {
-        container.appendChild(document.createTextNode(match[0]));
-      }
-
-      cursor = match.index + match[0].length;
-    }
-
-    if (cursor < source.length) {
-      container.appendChild(document.createTextNode(source.slice(cursor)));
-    }
-  }
-
-  function addChoiceButtons(content, choices) {
-    if (!Array.isArray(choices) || choices.length === 0) return;
-
-    const list = document.createElement("div");
-    list.className = "choice-list";
-
-    choices.forEach(name => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "choice-button";
-      button.textContent = name;
-      button.addEventListener("click", () => {
-        askQuestion("Where is " + name + "?");
-      });
-
-      list.appendChild(button);
-    });
-
-    content.appendChild(list);
-  }
-
-  function addMessage(text, kind, locationData = null, choices = null) {
+  function addMessage(text, kind, locationData = null) {
     const row = document.createElement("div");
     row.className = "message " + kind;
 
@@ -780,12 +829,11 @@
 
     const bubble = document.createElement("div");
     bubble.className = "bubble";
-    renderSafeText(bubble, text);
+    bubble.textContent = text;
 
     content.append(label, bubble);
 
     if (kind === "bot") {
-      addChoiceButtons(content, choices);
       addLocationCard(content, locationData);
 
       const actions = document.createElement("div");
@@ -864,8 +912,8 @@
       typing.remove();
 
       const answer = data.response || "No answer was returned.";
-      addMessage(answer, "bot", data.location || null, data.choices || null);
-      status.textContent = "Ready";
+      addMessage(answer, "bot", data.location || null);
+      status.textContent = compassMode ? "Compass Location ready" : "Ready";
 
       if (readAloud) speak(answer);
     } catch (error) {
@@ -896,6 +944,12 @@
     });
   });
 
+  document.querySelectorAll("[data-destination]").forEach(button => {
+    button.addEventListener("click", () => {
+      askQuestion(button.dataset.destination);
+    });
+  });
+
   document.querySelectorAll("[data-view]").forEach(button => {
     button.addEventListener("click", () => {
       if (button.dataset.view === "dashboard") {
@@ -906,12 +960,17 @@
     });
   });
 
+  document.getElementById("compass-button").addEventListener("click", () => {
+    showCompassLocation();
+  });
+
   document.getElementById("new-chat").addEventListener("click", () => {
     stopSpeaking();
     messages.replaceChildren();
     input.value = "";
     status.textContent = "Ready";
     showChatView();
+    hint.textContent = "Check important details with official GZU sources.";
     scrollToBottom();
     input.focus();
   });
@@ -973,7 +1032,11 @@
 
     recognition.onend = () => {
       micButton.textContent = "🎙️";
-      if (!busy) status.textContent = "Ready";
+      if (!busy) {
+        status.textContent = compassMode
+          ? "Compass Location ready"
+          : "Ready";
+      }
     };
 
     micButton.addEventListener("click", () => {
