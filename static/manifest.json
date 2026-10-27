@@ -1,11 +1,27 @@
 {
-  "name": "GZU Campus Assistant",
+  "id": "/",
+  "name": "Great Zimbabwe University Campus Assistant",
   "short_name": "GZU Assistant",
-  "description": "Campus information assistant for Great Zimbabwe University.",
+  "description": "A student information assistant for Great Zimbabwe University.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f5f8f5",
+  "orientation": "any",
+  "background_color": "#f4f7f5",
   "theme_color": "#176b45",
-  "icons": []
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
 }
