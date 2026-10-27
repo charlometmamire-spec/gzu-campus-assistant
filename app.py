@@ -6,7 +6,7 @@ from difflib import SequenceMatcher
 from urllib.parse import quote_plus
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
-
+ 
 
 # ---------------------------------------------------------
 # APPLICATION CONFIGURATION
