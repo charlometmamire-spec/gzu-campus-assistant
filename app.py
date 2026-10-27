@@ -6,7 +6,7 @@ from difflib import SequenceMatcher
 from urllib.parse import quote_plus
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
- 
+
 
 # ---------------------------------------------------------
 # APPLICATION CONFIGURATION
@@ -168,10 +168,11 @@ def is_direction_request(message):
     if contains_any(text, DIRECTION_PHRASES):
         return True
 
-    # Also recognize short requests such as "Mashava library location"
-    # and "Student Village map".
+    # Recognize requests such as "Mashava library location" and "Student Village map".
     words = word_set(text)
-    return bool(words & {"location", "directions", "direction", "map", "navigate"})
+    return bool(
+        words & {"location", "directions", "direction", "map", "navigate"}
+    )
 
 
 def facility_aliases(facility, details):
@@ -201,20 +202,21 @@ def facility_match_score(message, facility, details):
     """
     Score a directory entry against a location question.
 
-    Exact facility names and aliases score highest. A fuzzy match is
-    accepted only when it is reasonably strong and the query has enough
-    meaningful words to avoid matching unrelated places.
+    Exact facility names and aliases score highest. Fuzzy matching is
+    used only when the query contains enough meaningful words.
     """
     text = normalize(message)
     aliases = facility_aliases(facility, details)
 
+    # Exact facility name or alias match.
     for alias in aliases:
         pattern = r"(?<!\w)" + re.escape(alias) + r"(?!\w)"
         if re.search(pattern, text):
             return 1.0, alias
 
-    # Remove common direction wording before trying a fuzzy match.
+    # Remove common direction wording before fuzzy matching.
     cleaned = text
+
     for phrase in sorted(DIRECTION_PHRASES, key=len, reverse=True):
         cleaned = re.sub(
             r"(?<!\w)" + re.escape(phrase) + r"(?!\w)",
@@ -223,6 +225,7 @@ def facility_match_score(message, facility, details):
         )
 
     cleaned_words = word_set(cleaned) - LOCATION_WORDS
+
     if not cleaned_words:
         return 0.0, ""
 
@@ -232,26 +235,24 @@ def facility_match_score(message, facility, details):
 
     for alias in aliases:
         alias_words = word_set(alias)
+
         if not alias_words:
             continue
 
-        # A meaningful alias must have at least one shared word.
         shared = cleaned_words & alias_words
+
         if not shared:
             continue
 
         overlap = len(shared) / max(len(alias_words), 1)
         similarity = SequenceMatcher(None, cleaned_query, alias).ratio()
 
-        # Prefer word overlap for multi-word names and fuzzy similarity
-        # only when the query looks like a genuine name variation.
         score = max(overlap * 0.92, similarity * 0.82)
 
         if score > best_score:
             best_score = score
             best_alias = alias
 
-    # Avoid weak matches, especially on broad aliases like "campus".
     if len(cleaned_words) == 1:
         threshold = 0.82
     else:
@@ -264,7 +265,7 @@ def facility_match_score(message, facility, details):
 
 
 def find_campus_answer(message):
-    """Return structured location data only for a recognized place request."""
+    """Return structured location data for a recognized facility."""
     if not is_direction_request(message):
         return None
 
@@ -280,7 +281,6 @@ def find_campus_answer(message):
         )
 
         if score > 0:
-            # Exact matches win; longer names break close ties.
             matches.append(
                 (score, len(matched_alias), facility, details)
             )
@@ -291,10 +291,10 @@ def find_campus_answer(message):
     matches.sort(key=lambda item: (item[0], item[1]), reverse=True)
     best_score, _, facility, details = matches[0]
 
-    # If two different facilities have almost identical match scores,
-    # do not silently choose one.
+    # Avoid silently choosing between two nearly equal fuzzy matches.
     if len(matches) > 1:
         second_score, _, second_facility, _ = matches[1]
+
         if (
             best_score < 1.0
             and second_facility != facility
@@ -315,8 +315,9 @@ def find_campus_answer(message):
 
     verified = bool(details.get("verified", False))
 
-    # A configured map_query may be more specific than the display name.
-    map_query = str(details.get("map_query", facility)).strip() or facility
+    map_query = str(
+        details.get("map_query", facility)
+    ).strip() or facility
 
     map_url = (
         "https://www.google.com/maps/search/?api=1&query="
@@ -396,7 +397,6 @@ def detect_intent(text):
     """Identify a specific FAQ intent, preferring more specific phrases."""
     normalized = normalize(text)
 
-    # Portal tasks must be distinguished before general portal questions.
     if contains_any(normalized, INTENT_GROUPS["portal_reset"]):
         return "portal_reset"
 
@@ -441,7 +441,7 @@ def faq_intent(question):
 
 
 def faq_score(message, faq, user_intent):
-    """Calculate a relevance score with penalties for intent mismatches."""
+    """Calculate relevance while penalizing intent mismatches."""
     text = normalize(message)
     question = normalize(faq["question"])
 
@@ -483,19 +483,21 @@ def faq_score(message, faq, user_intent):
         if user_intent == candidate_intent:
             score += 0.18
         else:
-            # A strong penalty prevents timetable, fees, portal and
-            # accommodation questions from borrowing each other's answers.
             score -= 0.40
 
-    # A question with a distinctive keyword absent from the user's query
-    # should not win just because the sentence structure is similar.
     distinctive_groups = {
         "exam_timetable": {"timetable", "schedule", "exam", "examination"},
         "results": {"results", "result", "grades", "marks"},
         "fees": {"fees", "fee", "payment", "receipt"},
-        "accommodation": {"accommodation", "hostel", "housing", "residence"},
-        "admission": {"admission", "application", "apply", "acceptance"},
-        "registration": {"registration", "register", "enrolment", "enrollment"},
+        "accommodation": {
+            "accommodation", "hostel", "housing", "residence"
+        },
+        "admission": {
+            "admission", "application", "apply", "acceptance"
+        },
+        "registration": {
+            "registration", "register", "enrolment", "enrollment"
+        },
         "portal_reset": {"password", "reset", "forgot"},
         "portal_create": {"create", "account"},
         "portal_access": {"portal", "login", "access", "sign"},
@@ -505,6 +507,7 @@ def faq_score(message, faq, user_intent):
 
     if candidate_intent in distinctive_groups:
         distinctive = distinctive_groups[candidate_intent]
+
         if not (message_words & distinctive):
             score -= 0.15
 
@@ -523,14 +526,11 @@ def find_faq_answer(message):
     if not faqs:
         return unknown_answer()
 
-    # Exact question match first.
     for faq in faqs:
         if text == normalize(faq["question"]):
             return faq["answer"]
 
     user_intent = detect_intent(text)
-
-    # Score all candidates.
     candidates = []
 
     for faq in faqs:
@@ -544,20 +544,18 @@ def find_faq_answer(message):
 
     best_score, best_faq = candidates[0]
 
-    # Intent-specific matches may use a slightly lower threshold than
-    # general fuzzy matches because their topic has already been identified.
     if user_intent and faq_intent(best_faq["question"]) == user_intent:
         threshold = 0.48
     else:
         threshold = 0.58
 
-    # Require a clear lead over the next candidate when the scores are close.
     if len(candidates) > 1:
         second_score, second_faq = candidates[1]
 
         if (
             best_score < 0.80
-            and faq_intent(best_faq["question"]) != faq_intent(second_faq["question"])
+            and faq_intent(best_faq["question"])
+            != faq_intent(second_faq["question"])
             and abs(best_score - second_score) < 0.07
         ):
             return unknown_answer()
@@ -579,126 +577,245 @@ def unknown_answer():
 
 
 # ---------------------------------------------------------
-# ANSWER ROUTING
+# CONVERSATIONAL AND GENERAL GZU QUESTIONS
 # ---------------------------------------------------------
 
-def directory_choices():
-    """Return the names in the supplied directory without claiming verification."""
-    directory = load_directory()
-    return [
-        {"name": str(name), "verified": bool(details.get("verified", False))}
-        for name, details in directory.items()
-        if isinstance(details, dict)
-    ]
+def is_greeting(message):
+    text = normalize(message)
+
+    return text in {
+        "hi", "hello", "hey", "good morning", "good afternoon",
+        "good evening", "how are you", "hi there", "hello there",
+        "hey there", "good day"
+    }
+
+
+def is_off_topic(message):
+    """Identify obvious unrelated requests without blocking GZU questions."""
+    text = normalize(message)
+
+    if not text:
+        return False
+
+    gzu_terms = {
+        "gzu", "great zimbabwe", "university", "campus", "student",
+        "students", "admission", "registration", "fees", "exam",
+        "examination", "timetable", "results", "portal", "faculty",
+        "faculties", "course", "courses", "library", "accommodation",
+        "conduct", "services", "lecturer", "lecturers", "semester",
+        "programme", "program", "degree", "contact", "location",
+        "hostel"
+    }
+
+    if word_set(text) & gzu_terms:
+        return False
+
+    unrelated = {
+        "football", "soccer", "recipe", "recipes", "movie", "movies",
+        "celebrity", "celebrity gossip", "weather today", "write a poem",
+        "love advice", "bitcoin price", "stock price"
+    }
+
+    return contains_any(text, unrelated)
 
 
 def general_gzu_answer(message):
-    """Handle the main navigation topics with useful, cautious guidance."""
+    """Handle high-value general questions before fuzzy FAQ matching."""
     text = normalize(message)
-    website = GZU_WEBSITE
 
-    # The location topic should offer real directory choices first.
-    if (
-        contains_any(text, {"campus locations", "campus location", "campus libraries", "campus library", "explore locations", "campus directory"})
-        or text in {"where can i find the gzu campus libraries", "where can i find the campus libraries"}
-    ):
-        names = [item["name"] for item in directory_choices()]
-        if names:
-            listing = "\n".join(f"• {name}" for name in names)
-            return {
-                "response": (
-                    "Which campus facility would you like to find? These are the places currently listed in the chatbot directory:\n\n"
-                    + listing
-                    + "\n\nType a place name (for example, ‘Mashava Campus Library’) and I’ll show its map search. The directory currently marks these locations as unverified, so please confirm the exact location with GZU staff before travelling."
-                ),
-                "location": None,
-                "choices": names,
-            }
+    if is_greeting(message):
+        return (
+            "Hello! Welcome to the GZU Campus Assistant. I'm here to help "
+            "with Great Zimbabwe University information, including admissions, "
+            "registration, fees, student services, campus locations and "
+            "academic information. What would you like to know?"
+        )
 
-    if contains_any(text, {"what student services", "student services", "student support", "services available"}):
-        return {"response": (
-            "GZU student services can include academic and administrative support, library and learning resources, accommodation information, and student welfare or medical support. The exact services and arrangements may differ by campus.\n\n"
-            "To get help:\n1. Identify the service you need and your campus.\n2. Check the official GZU website for current contacts and announcements.\n3. If it concerns your personal student account or record, contact the responsible university office directly.\n\nOfficial website: " + website
-        ), "location": None}
+    identity_phrases = {
+        "what is gzu", "what is great zimbabwe university",
+        "explain gzu university", "explain great zimbabwe university",
+        "tell me about gzu", "tell me about great zimbabwe university",
+        "describe gzu", "what kind of university is gzu",
+        "what is gzu university"
+    }
 
-    if contains_any(text, {"conduct rules", "student conduct", "conduct information", "disciplinary rules", "student code of conduct"}):
-        return {"response": (
-            "For student conduct, use the current GZU regulations or student handbook as the authoritative source; I do not have a verified copy of every current rule in this chatbot.\n\n"
-            "Suggested steps:\n1. Check the official university website for current student regulations or handbook documents.\n2. Read the section relevant to your situation.\n3. If the rule or procedure is unclear, ask your faculty office or the responsible student-affairs/administrative office before acting.\n\nOfficial website: " + website
-        ), "location": None}
+    if contains_any(text, identity_phrases):
+        return (
+            "Great Zimbabwe University (GZU) is a public university in "
+            "Zimbabwe. For current information about its academic programmes, "
+            "admissions, campuses, university offices and announcements, "
+            f"visit the official website: {GZU_WEBSITE}"
+        )
 
-    if contains_any(text, {"what is great zimbabwe university", "about gzu", "tell me about gzu", "about great zimbabwe university", "show me gzu university", "explore gzu", "explore great zimbabwe university"}):
-        return {"response": (
-            "Great Zimbabwe University (GZU) is a public university in Zimbabwe. For the university’s current faculties, programmes, campus information, notices and official announcements, use the university’s official website.\n\n"
-            "Explore GZU: " + website + "\n\nIf you tell me which programme, campus or service you want to explore, I can help you narrow down what to look for."
-        ), "location": None}
+    show_phrases = {
+        "show me gzu", "show me gzu university",
+        "show me great zimbabwe university",
+        "i want to see gzu", "let me see gzu", "show gzu campus",
+        "show me the university", "gzu pictures", "gzu photos",
+        "show me images of gzu"
+    }
 
-    if contains_any(text, {"how can i contact gzu", "contact information", "contact gzu", "gzu contact", "university phone number", "university email"}):
-        return {"response": (
-            "For current GZU telephone numbers, email addresses and office contacts, use the official university contact information so you do not rely on an outdated number.\n\n"
-            "1. Open the official website.\n2. Look for the Contact Us or relevant faculty/office page.\n3. Contact the office responsible for your question and include your student number only when communicating through an official, trusted channel.\n\nOfficial website: " + website
-        ), "location": None}
+    if contains_any(text, show_phrases):
+        return (
+            "You can explore Great Zimbabwe University's official website, "
+            "which may include campus photographs, news and university "
+            "information: " + GZU_WEBSITE + "\n\n"
+            "I don't currently have a verified campus-photo gallery built "
+            "into this assistant, so I won't show unverified or unrelated "
+            "images. The gallery can be added later if suitable image files "
+            "are available in the project's static folder."
+        )
+
+    generic_location_phrases = {
+        "campus locations", "show me campus locations", "where is gzu",
+        "where is gzu university", "where are gzu campuses",
+        "show me the gzu campus", "campus location"
+    }
+
+    if contains_any(text, generic_location_phrases):
+        return (
+            "I can help locate a specific GZU building or facility. Please "
+            "name the place you need, such as a library, administration "
+            "office or student residence. For the official campus information "
+            "currently published by GZU, visit " + GZU_WEBSITE +
+            " Please confirm directions with university staff because some "
+            "entries in this assistant's directory have not been verified."
+        )
+
+    service_phrases = {
+        "student services", "what student services are available",
+        "what services are available for students",
+        "student support services", "support services at gzu",
+        "how can student services help me"
+    }
+
+    if contains_any(text, service_phrases):
+        return (
+            "I can help you find information about student support and "
+            "university services, but I don't have a verified, complete list "
+            "of every service in the current FAQ database. Start with the "
+            "official GZU website at " + GZU_WEBSITE +
+            " or contact the relevant university office for current guidance."
+        )
+
+    conduct_phrases = {
+        "conduct info", "conduct information", "student code of conduct",
+        "student conduct rules", "university rules and regulations",
+        "disciplinary rules", "student discipline", "code of conduct"
+    }
+
+    if contains_any(text, conduct_phrases):
+        return (
+            "For student conduct rules, disciplinary procedures and official "
+            "university regulations, please consult the current GZU handbook "
+            "or official university notices. I don't want to quote a rule "
+            "that may be outdated. Start at " + GZU_WEBSITE +
+            " and confirm any disciplinary matter with the appropriate GZU office."
+        )
+
+    contact_phrases = {
+        "contact gzu", "gzu contact information", "how can i contact gzu",
+        "university contact details", "contact the university"
+    }
+
+    if contains_any(text, contact_phrases):
+        return (
+            "For current official contact details, use the contact information "
+            "published by Great Zimbabwe University: " + GZU_WEBSITE +
+            " Please use the relevant faculty or office contact listed there."
+        )
 
     return None
 
 
-def is_clearly_off_topic(message):
-    """Avoid pretending to be a general-purpose assistant for unrelated topics."""
-    text = normalize(message)
-    if not text or contains_any(text, {"gzu", "great zimbabwe", "university", "campus", "student", "admission", "registration", "portal", "fees", "library", "timetable", "results", "accommodation", "course", "lecturer", "faculty", "exam"}):
-        return False
-    unrelated = {
-        "weather", "football", "soccer", "recipe", "recipes", "horoscope",
-        "stock market", "bitcoin", "celebrity gossip", "write me a poem about mars",
-        "where is mars", "capital of france", "solve this unrelated puzzle",
-    }
-    return contains_any(text, unrelated)
-
+# ---------------------------------------------------------
+# ANSWER ROUTING
+# ---------------------------------------------------------
 
 def find_answer(message):
-    """Route a question to a relevant topic, known location, FAQ, or honest fallback."""
+    """
+    Route questions in the correct order:
+    1. Empty-message check.
+    2. Specific campus facility matching.
+    3. General GZU questions.
+    4. Obvious off-topic questions.
+    5. Unmatched direction requests.
+    6. FAQ matching.
+    """
     if not normalize(message):
-        return {"response": "Please type a question so I can help.", "location": None}
-
-    # Handle the dedicated navigation topics before generic FAQ matching.
-    curated = general_gzu_answer(message)
-    if curated:
-        return curated
-
-    # Show a location card only when a named directory place is matched.
-    location = find_campus_answer(message)
-    if location:
-        response = f"{location['name']} — {location['campus']}. {location['description']}"
-        if not location["verified"]:
-            response += " The exact location has not been verified. Please confirm it with university staff before travelling."
-        return {"response": response, "location": location}
-
-    if is_direction_request(message):
-        names = [item["name"] for item in directory_choices()]
         return {
-            "response": (
-                "I couldn't confidently match that place to the current directory. Try one of these listed names: "
-                + ", ".join(names)
-                + f". The entries are not verified; confirm exact locations with university staff. Official website: {GZU_WEBSITE}"
-            ),
+            "response": "Please type a question so I can help.",
             "location": None,
-            "choices": names,
         }
 
-    if is_clearly_off_topic(message):
-        return {"response": (
-            "I’m the GZU Campus Assistant, so I’m designed to help with Great Zimbabwe University information, campus facilities, student processes and university services. "
-            "Please ask a GZU-related question and I’ll do my best to help."
-        ), "location": None}
+    # IMPORTANT:
+    # Match a specific campus facility BEFORE general campus questions.
+    # This prevents "Where is Mashava Campus Library?" from triggering
+    # the general campus-locations response.
 
-    answer = find_faq_answer(message)
-    # For an unverified/unmatched GZU question, explicitly say what is missing
-    # and give a practical next step rather than presenting a guess as fact.
-    return {"response": answer, "location": None}
+    location = find_campus_answer(message)
+
+    if location:
+        response = (
+            f"{location['name']} — {location['campus']}. "
+            f"{location['description']}"
+        )
+
+        if not location["verified"]:
+            response += (
+                " The exact location has not been verified. Please confirm "
+                "it with university staff before travelling."
+            )
+
+        return {
+            "response": response,
+            "location": location,
+        }
+
+    # Handle greetings and general GZU questions only after checking
+    # whether the user named a particular facility.
+    curated = general_gzu_answer(message)
+
+    if curated:
+        return {
+            "response": curated,
+            "location": None,
+        }
+
+    if is_off_topic(message):
+        return {
+            "response": (
+                "I'm the GZU Campus Assistant, designed to help with "
+                "Great Zimbabwe University information. I can't reliably "
+                "answer that unrelated question, but I can help with "
+                "admissions, registration, fees, student services, campus "
+                "locations, the academic calendar or examination information. "
+                "You can also visit " + GZU_WEBSITE
+            ),
+            "location": None,
+        }
+
+    # Do not return an unrelated FAQ when a location could not be matched.
+    if is_direction_request(message):
+        return {
+            "response": (
+                "I couldn't confidently identify that campus location in "
+                "the current directory. Please include the name of the "
+                "building, campus or facility, or check the official GZU "
+                f"website at {GZU_WEBSITE}. Some directory locations have "
+                "not yet been verified, so confirm before travelling."
+            ),
+            "location": None,
+        }
+
+    return {
+        "response": find_faq_answer(message),
+        "location": None,
+    }
 
 
 # ---------------------------------------------------------
-# ROUTES
+# FLASK ROUTES
 # ---------------------------------------------------------
 
 @app.route("/")
@@ -730,8 +847,10 @@ def service_worker():
         "service-worker.js",
         mimetype="application/javascript",
     )
+
     response.headers["Service-Worker-Allowed"] = "/"
     response.headers["Cache-Control"] = "no-cache"
+
     return response
 
 
@@ -747,6 +866,7 @@ def chat():
         }), 400
 
     result = find_answer(message)
+
     log_chat(message, result["response"])
 
     return jsonify(result)
