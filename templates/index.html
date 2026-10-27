@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -22,412 +21,188 @@
     }
 
     * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      height: 100vh;
-      color: var(--text);
-      background: var(--page);
-    }
-
+    body { margin: 0; height: 100vh; color: var(--text); background: var(--page); }
     button, input { font: inherit; }
     button { cursor: pointer; }
     button:disabled { opacity: .55; cursor: wait; }
-    a { color: var(--green); }
+    a { color: var(--green); overflow-wrap: anywhere; }
 
-    .app {
-      display: flex;
-      height: 100vh;
-      min-height: 0;
-    }
+    .app { display: flex; height: 100vh; min-height: 0; }
 
     .sidebar {
-      width: 255px;
-      flex-shrink: 0;
-      background: white;
-      border-right: 1px solid var(--border);
-      padding: 20px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
+      width: 255px; flex-shrink: 0; background: white;
+      border-right: 1px solid var(--border); padding: 20px 14px;
+      display: flex; flex-direction: column; gap: 18px;
+      overflow-y: auto;
     }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      padding: 4px 6px 14px;
-    }
-
+    .brand { display: flex; align-items: center; gap: 11px; padding: 4px 6px 14px; }
     .brand-icon {
-      width: 43px;
-      height: 43px;
-      border-radius: 13px;
-      background: var(--green);
-      color: white;
-      display: grid;
-      place-items: center;
-      font-size: 22px;
-      font-weight: bold;
+      width: 43px; height: 43px; border-radius: 13px;
+      background: var(--green); color: white; display: grid;
+      place-items: center; font-size: 22px; font-weight: bold;
     }
-
     .brand h1 { font-size: 16px; margin: 0 0 4px; }
     .brand p { font-size: 11px; color: var(--muted); margin: 0; }
 
     .primary, .nav-button, .tool-button {
-      border: 1px solid var(--border);
-      background: white;
-      color: var(--text);
-      border-radius: 10px;
-      padding: 12px;
-      text-align: left;
-      width: 100%;
+      border: 1px solid var(--border); background: white; color: var(--text);
+      border-radius: 10px; padding: 12px; text-align: left; width: 100%;
     }
-
     .primary {
-      background: var(--green);
-      border-color: var(--green);
-      color: white;
-      font-weight: bold;
-      text-align: center;
+      background: var(--green); border-color: var(--green); color: white;
+      font-weight: bold; text-align: center;
     }
-
+    .primary:hover, .send:hover { background: var(--green-dark); }
     .nav-heading {
-      font-size: 11px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin: 0 0 8px 8px;
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 1px; margin: 0 0 8px 8px;
     }
-
     .nav-button { margin-bottom: 5px; }
     .nav-button:hover, .tool-button:hover { background: var(--green-light); }
     .nav-button.active { background: var(--green-light); color: var(--green-dark); }
     .sidebar-bottom { margin-top: auto; }
     .small-note { font-size: 12px; color: var(--muted); line-height: 1.6; padding: 10px; }
 
-    .main {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-    }
-
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     .topbar {
-      background: white;
-      border-bottom: 1px solid var(--border);
-      padding: 16px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
+      background: white; border-bottom: 1px solid var(--border);
+      padding: 16px 24px; display: flex; justify-content: space-between;
+      align-items: center; gap: 12px;
     }
-
     .topbar h2 { margin: 0; font-size: 18px; }
     .topbar p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
-
-    .online {
-      color: var(--green);
-      font-size: 12px;
-      white-space: nowrap;
-    }
-
+    .online { color: var(--green); font-size: 12px; white-space: nowrap; }
     .online::before {
-      content: "";
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #35a66b;
-      margin-right: 6px;
+      content: ""; display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; background: #35a66b; margin-right: 6px;
     }
 
-    .view {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      padding: 24px;
-    }
-
-    .welcome {
-      max-width: 820px;
-      margin: 22px auto 28px;
-      text-align: center;
-    }
-
+    .view { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; }
+    .welcome { max-width: 820px; margin: 22px auto 28px; text-align: center; }
     .welcome-icon {
-      width: 65px;
-      height: 65px;
-      margin: 0 auto 18px;
-      display: grid;
-      place-items: center;
-      border-radius: 20px;
-      background: var(--green-light);
-      color: var(--green);
-      font-size: 31px;
+      width: 65px; height: 65px; margin: 0 auto 18px; display: grid;
+      place-items: center; border-radius: 20px; background: var(--green-light);
+      color: var(--green); font-size: 31px;
     }
-
     .welcome h2 { font-size: clamp(23px, 3vw, 32px); margin: 0 0 12px; }
     .welcome p { color: var(--muted); line-height: 1.6; margin: 0 auto; max-width: 570px; }
 
     .suggestions {
-      max-width: 760px;
-      margin: 25px auto;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      max-width: 760px; margin: 25px auto; display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
     }
-
     .suggestion {
-      background: white;
-      border: 1px solid var(--border);
-      border-radius: 13px;
-      padding: 16px;
-      text-align: left;
-      color: var(--text);
-      line-height: 1.45;
+      background: white; border: 1px solid var(--border); border-radius: 13px;
+      padding: 16px; text-align: left; color: var(--text); line-height: 1.45;
     }
-
     .suggestion:hover { border-color: var(--green); }
     .suggestion strong { display: block; margin-bottom: 5px; }
     .suggestion span { color: var(--muted); font-size: 13px; }
 
     #messages {
-      max-width: 850px;
-      width: 100%;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
+      max-width: 850px; width: 100%; margin: 0 auto;
+      display: flex; flex-direction: column; gap: 18px;
     }
-
-    .message {
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
-    }
-
+    .message { display: flex; gap: 10px; align-items: flex-start; }
     .message.user { flex-direction: row-reverse; }
-
     .avatar {
-      width: 34px;
-      height: 34px;
-      border-radius: 11px;
-      display: grid;
-      place-items: center;
-      flex-shrink: 0;
-      background: var(--green-light);
-      color: var(--green);
-      font-weight: bold;
-      font-size: 12px;
+      width: 34px; height: 34px; border-radius: 11px; display: grid;
+      place-items: center; flex-shrink: 0; background: var(--green-light);
+      color: var(--green); font-weight: bold; font-size: 12px;
     }
-
     .user .avatar { background: var(--green); color: white; }
-
     .message-content { max-width: min(80%, 680px); min-width: 0; }
     .message-label { font-size: 11px; color: var(--muted); margin: 2px 0 6px; }
-
     .bubble {
-      padding: 14px 16px;
-      border-radius: 4px 15px 15px 15px;
-      background: white;
-      border: 1px solid var(--border);
-      line-height: 1.65;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
+      padding: 14px 16px; border-radius: 4px 15px 15px 15px;
+      background: white; border: 1px solid var(--border); line-height: 1.65;
+      white-space: pre-wrap; overflow-wrap: anywhere;
     }
-
     .user .bubble {
-      background: var(--green);
-      color: white;
-      border-color: var(--green);
+      background: var(--green); color: white; border-color: var(--green);
       border-radius: 15px 4px 15px 15px;
     }
-
-    .bubble a { color: #176b45; text-decoration: underline; overflow-wrap: anywhere; }
-    .message.user .bubble a { color: #ffffff; }
+    .bubble a { color: var(--green); text-decoration: underline; }
+    .message.user .bubble a { color: white; }
     .choice-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-    .choice-button { border: 1px solid #b8d7c4; background: #f2faf5; color: #155d3d; border-radius: 9px; padding: 8px 11px; cursor: pointer; font: inherit; text-align: left; }
+    .choice-button {
+      border: 1px solid #b8d7c4; background: #f2faf5; color: #155d3d;
+      border-radius: 9px; padding: 8px 11px; font: inherit; text-align: left;
+    }
     .choice-button:hover { background: #e4f3e9; }
-
     .message-actions { display: flex; gap: 6px; margin-top: 7px; }
-
     .mini-button {
-      border: 1px solid var(--border);
-      background: white;
-      border-radius: 8px;
-      padding: 6px 9px;
-      color: var(--muted);
-      font-size: 12px;
+      border: 1px solid var(--border); background: white; border-radius: 8px;
+      padding: 6px 9px; color: var(--muted); font-size: 12px;
     }
 
-    /* Campus location card */
     .location-card {
-      margin-top: 12px;
-      width: 100%;
-      max-width: 620px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: white;
+      margin-top: 12px; width: 100%; max-width: 620px; overflow: hidden;
+      border: 1px solid var(--border); border-radius: 14px; background: white;
     }
-
-    .location-heading {
-      padding: 15px 16px 10px;
-    }
-
-    .location-heading h3 {
-      margin: 0 0 5px;
-      font-size: 17px;
-      color: var(--green-dark);
-    }
-
-    .location-campus {
-      margin: 0;
-      font-size: 13px;
-      color: var(--muted);
-    }
-
+    .location-heading { padding: 15px 16px 10px; }
+    .location-heading h3 { margin: 0 0 5px; font-size: 17px; color: var(--green-dark); }
+    .location-campus { margin: 0; font-size: 13px; color: var(--muted); }
     .location-map {
-      display: block;
-      width: 100%;
-      height: 260px;
-      border: 0;
+      display: block; width: 100%; height: 260px; border: 0;
       background: var(--green-light);
     }
-
-    .map-fallback {
-      padding: 16px;
-      background: var(--green-light);
-      line-height: 1.5;
-      font-size: 13px;
-    }
-
-    .location-details {
-      padding: 14px 16px 16px;
-    }
-
-    .location-details p {
-      margin: 0 0 12px;
-      line-height: 1.6;
-      font-size: 14px;
-      overflow-wrap: anywhere;
-    }
-
+    .location-details { padding: 14px 16px 16px; }
+    .location-details p { margin: 0 0 12px; line-height: 1.6; font-size: 14px; }
     .verification-notice {
-      padding: 10px 12px;
-      margin: 10px 0 14px;
-      background: #fff8e7;
-      border: 1px solid #f0dfb5;
-      border-radius: 9px;
-      color: #76571b;
-      font-size: 12px;
-      line-height: 1.5;
+      padding: 10px 12px; margin: 10px 0 14px; background: #fff8e7;
+      border: 1px solid #f0dfb5; border-radius: 9px; color: #76571b;
+      font-size: 12px; line-height: 1.5;
     }
-
     .verification-notice.verified {
-      background: var(--green-light);
-      border-color: #c8e2d1;
-      color: var(--green-dark);
+      background: var(--green-light); border-color: #c8e2d1; color: var(--green-dark);
     }
-
     .map-link {
-      display: inline-block;
-      padding: 10px 13px;
-      border-radius: 9px;
-      background: var(--green);
-      color: white;
-      text-decoration: none;
-      font-weight: bold;
-      font-size: 13px;
+      display: inline-block; padding: 10px 13px; border-radius: 9px;
+      background: var(--green); color: white; text-decoration: none;
+      font-weight: bold; font-size: 13px;
     }
-
     .map-link:hover { background: var(--green-dark); }
 
     .composer-area {
-      padding: 14px 24px 18px;
-      background: white;
+      padding: 14px 24px 18px; background: white;
       border-top: 1px solid var(--border);
     }
-
     .composer {
-      max-width: 850px;
-      margin: 0 auto;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      padding: 8px;
-      border: 1px solid #ccdcd1;
-      border-radius: 15px;
-      background: white;
+      max-width: 850px; margin: 0 auto; display: flex; gap: 8px;
+      align-items: center; padding: 8px; border: 1px solid #ccdcd1;
+      border-radius: 15px; background: white;
     }
-
     .composer input {
-      flex: 1;
-      min-width: 0;
-      border: 0;
-      outline: 0;
-      padding: 10px 6px;
-      color: var(--text);
+      flex: 1; min-width: 0; border: 0; outline: 0;
+      padding: 10px 6px; color: var(--text);
     }
-
-    .tool-button {
-      width: auto;
-      padding: 10px 12px;
-      text-align: center;
-      white-space: nowrap;
-    }
-
+    .tool-button { width: auto; padding: 10px 12px; text-align: center; white-space: nowrap; }
     .send {
-      background: var(--green);
-      border: 0;
-      color: white;
-      border-radius: 10px;
+      background: var(--green); border: 0; color: white; border-radius: 10px;
       padding: 11px 16px;
     }
-
-    .hint {
-      text-align: center;
-      color: var(--muted);
-      font-size: 11px;
-      margin-top: 10px;
-    }
+    .hint { text-align: center; color: var(--muted); font-size: 11px; margin-top: 10px; }
 
     .dashboard { max-width: 850px; margin: 0 auto; }
     .dashboard h2 { margin-top: 0; }
-
     .dashboard-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-      margin-top: 20px;
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px; margin-top: 20px;
     }
-
-    .dash-card {
-      background: white;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 20px;
-    }
-
+    .dash-card { background: white; border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
     .dash-card h3 { margin-top: 0; }
     .dash-card p { color: var(--muted); line-height: 1.6; font-size: 14px; }
     .dash-card button { margin-top: 8px; }
-
     .mobile-menu { display: none; }
 
     @media (max-width: 720px) {
       .sidebar {
-        position: fixed;
-        z-index: 5;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        transform: translateX(-105%);
-        transition: transform .2s ease;
+        position: fixed; z-index: 5; top: 0; bottom: 0; left: 0;
+        transform: translateX(-105%); transition: transform .2s ease;
         box-shadow: 8px 0 30px #00000012;
       }
-
       .sidebar.open { transform: translateX(0); }
       .mobile-menu { display: inline-block; }
       .topbar { padding: 13px 15px; }
@@ -441,7 +216,6 @@
       .hint { line-height: 1.5; }
       .location-map { height: 220px; }
     }
-
     @media (max-width: 390px) {
       .tool-button .long-label { display: none; }
       .online { font-size: 0; }
@@ -461,18 +235,18 @@
       </div>
     </div>
 
-    <button class="primary" id="new-chat">＋ New Chat</button>
+    <button class="primary" id="new-chat" type="button">＋ New Chat</button>
 
     <section>
       <p class="nav-heading">Workspace</p>
-      <button class="nav-button active" data-view="chat">💬 Campus Chat</button>
-      <button class="nav-button" data-view="dashboard">▦ Dashboard</button>
+      <button class="nav-button active" data-view="chat" type="button">💬 Campus Chat</button>
+      <button class="nav-button" data-view="dashboard" type="button">▦ Dashboard</button>
     </section>
 
     <section>
       <p class="nav-heading">Explore campus</p>
-      <button class="nav-button topic" data-question="How do I register for courses at GZU?">📚 Registration</button>
-      <button class="nav-button topic" data-question="Where can I find the GZU campus libraries?">📍 Campus locations</button>
+      <button class="nav-button topic" data-question="How do I register?">📚 Registration</button>
+      <button class="nav-button topic" data-question="Compass Location">🧭 Compass Location</button>
       <button class="nav-button topic" data-question="What student services are available at GZU?">🎓 Student services</button>
       <button class="nav-button topic" data-question="What are the student conduct rules at GZU?">📘 Conduct information</button>
       <button class="nav-button topic" data-question="What is Great Zimbabwe University?">🏛️ About GZU</button>
@@ -481,10 +255,10 @@
     </section>
 
     <div class="sidebar-bottom">
-      <button class="nav-button" id="clear-chat">🧹 Clear conversation</button>
+      <button class="nav-button" id="clear-chat" type="button">🧹 Clear conversation</button>
       <div class="small-note">
         Your campus information companion.<br>
-        <a href="https://www.gzu.ac.zw/" target="_blank" rel="noopener">Official GZU website ↗</a>
+        <a href="https://www.gzu.ac.zw/" target="_blank" rel="noopener noreferrer">Official GZU website ↗</a>
       </div>
     </div>
   </aside>
@@ -492,7 +266,7 @@
   <main class="main">
     <header class="topbar">
       <div style="display:flex;align-items:center;gap:12px">
-        <button class="tool-button mobile-menu" id="menu-button" aria-label="Open menu">☰</button>
+        <button class="tool-button mobile-menu" id="menu-button" type="button" aria-label="Open menu">☰</button>
         <div>
           <h2 id="page-title">Campus Chat</h2>
           <p id="page-subtitle">Ask questions about university life</p>
@@ -509,13 +283,13 @@
       </div>
 
       <div class="suggestions" id="suggestions">
-        <button class="suggestion" data-question="How do I register for courses at GZU?">
+        <button class="suggestion" data-question="How do I register?">
           <strong>📚 Course registration</strong>
           <span>Learn how to register for your modules.</span>
         </button>
-        <button class="suggestion" data-question="Where can I find the GZU campus libraries?">
-          <strong>📍 Campus locations</strong>
-          <span>Ask about libraries and campus facilities.</span>
+        <button class="suggestion" data-question="Compass Location">
+          <strong>🧭 Compass Location</strong>
+          <span>Find a campus place with a map preview and directions.</span>
         </button>
         <button class="suggestion" data-question="What student services are available at GZU?">
           <strong>🎓 Student services</strong>
@@ -530,26 +304,48 @@
       <div id="dashboard" class="dashboard" hidden>
         <h2>Your campus dashboard</h2>
         <p>Choose a topic to start a conversation with the GZU Campus Assistant.</p>
+
         <div class="dashboard-grid">
           <article class="dash-card">
             <h3>📚 Registration</h3>
             <p>Course registration guidance and student portal information.</p>
-            <button class="primary" data-question="How do I register for courses at GZU?">Ask about registration</button>
+            <button class="primary" data-question="How do I register?" type="button">Ask about registration</button>
           </article>
+
           <article class="dash-card">
-            <h3>📍 Campus directory</h3>
-            <p>Ask about campus locations and university facilities.</p>
-            <button class="primary" data-question="Where can I find the GZU campus libraries?">Explore locations</button>
+            <h3>🧭 Compass Location</h3>
+            <p>Find a campus location with a friendly guided search, map preview and directions.</p>
+            <button class="primary" data-question="Compass Location" type="button">Open Compass Location</button>
           </article>
+
           <article class="dash-card">
             <h3>🎓 Student services</h3>
             <p>Get help finding information about student services.</p>
-            <button class="primary" data-question="What student services are available at GZU?">Explore services</button>
+            <button class="primary" data-question="What student services are available at GZU?" type="button">Explore services</button>
           </article>
+
+          <article class="dash-card">
+            <h3>📘 Conduct information</h3>
+            <p>Find guidance on where to check current student regulations.</p>
+            <button class="primary" data-question="What are the student conduct rules at GZU?" type="button">Explore conduct information</button>
+          </article>
+
+          <article class="dash-card">
+            <h3>🏛️ About GZU</h3>
+            <p>Learn about the university and where to find official information.</p>
+            <button class="primary" data-question="What is Great Zimbabwe University?" type="button">About GZU</button>
+          </article>
+
+          <article class="dash-card">
+            <h3>☎ Contact information</h3>
+            <p>Find the official source for current university contacts.</p>
+            <button class="primary" data-question="How can I contact GZU?" type="button">Contact GZU</button>
+          </article>
+
           <article class="dash-card">
             <h3>🌐 Official information</h3>
             <p>Visit the official university website for verified announcements.</p>
-            <a href="https://www.gzu.ac.zw/" target="_blank" rel="noopener">Open GZU website ↗</a>
+            <a href="https://www.gzu.ac.zw/" target="_blank" rel="noopener noreferrer">Open GZU website ↗</a>
           </article>
         </div>
       </div>
@@ -560,7 +356,7 @@
     <footer class="composer-area" id="composer-area">
       <form class="composer" id="chat-form">
         <button class="tool-button" type="button" id="mic-button" title="Speak your question" aria-label="Speak your question">🎙️</button>
-        <input id="message" autocomplete="off" placeholder="Ask anything about GZU..." aria-label="Your question" required>
+        <input id="message" autocomplete="off" placeholder="Ask about GZU or type a campus location..." aria-label="Your question" required>
         <button class="tool-button" type="button" id="read-toggle" title="Read answers aloud" aria-pressed="false">🔊 <span class="long-label">Read aloud</span></button>
         <button class="send" id="send" type="submit">Send ➤</button>
       </form>
@@ -583,6 +379,7 @@
   const sidebar = document.getElementById("sidebar");
   const pageTitle = document.getElementById("page-title");
   const pageSubtitle = document.getElementById("page-subtitle");
+  const composerArea = document.getElementById("composer-area");
   const micButton = document.getElementById("mic-button");
   const readToggle = document.getElementById("read-toggle");
   const hint = document.getElementById("hint");
@@ -597,9 +394,9 @@
 
   function showChatView() {
     dashboard.hidden = true;
+    composerArea.hidden = false;
     welcome.hidden = messages.children.length > 0;
     suggestions.hidden = messages.children.length > 0;
-    document.getElementById("composer-area").hidden = false;
     pageTitle.textContent = "Campus Chat";
     pageSubtitle.textContent = "Ask questions about university life";
 
@@ -614,7 +411,7 @@
     welcome.hidden = true;
     suggestions.hidden = true;
     dashboard.hidden = false;
-    document.getElementById("composer-area").hidden = true;
+    composerArea.hidden = true;
     pageTitle.textContent = "Dashboard";
     pageSubtitle.textContent = "Explore campus information";
 
@@ -645,30 +442,26 @@
     card.appendChild(heading);
 
     const mapQuery = location.map_query || location.name || "Great Zimbabwe University";
-    const embedUrl =
-      "https://maps.google.com/maps?q=" +
-      encodeURIComponent(mapQuery) +
-      "&output=embed";
-
     const map = document.createElement("iframe");
     map.className = "location-map";
     map.title = "Map search for " + (location.name || "campus facility");
     map.loading = "lazy";
     map.referrerPolicy = "no-referrer-when-downgrade";
     map.setAttribute("allowfullscreen", "");
-    map.src = embedUrl;
+    map.src = "https://maps.google.com/maps?q=" +
+      encodeURIComponent(mapQuery) + "&output=embed";
+
     map.addEventListener("error", () => {
       map.hidden = true;
     });
-
     card.appendChild(map);
 
     const details = document.createElement("div");
     details.className = "location-details";
 
     const description = document.createElement("p");
-    description.textContent =
-      location.description || "Please confirm the facility location with university staff.";
+    description.textContent = location.description ||
+      "Please confirm the facility location with university staff.";
     details.appendChild(description);
 
     const notice = document.createElement("div");
@@ -679,28 +472,26 @@
       notice.textContent = "The directory marks this location as verified.";
     } else {
       notice.textContent =
-        "The exact facility location has not been verified. Confirm the location with university staff before travelling.";
+        "The exact facility location has not been verified. Confirm it with university staff before travelling.";
     }
-
     details.appendChild(notice);
 
     const mapLink = document.createElement("a");
     mapLink.className = "map-link";
-    mapLink.href =
-      location.map_url ||
+    mapLink.href = location.map_url ||
       ("https://www.google.com/maps/search/?api=1&query=" +
         encodeURIComponent(mapQuery));
     mapLink.target = "_blank";
     mapLink.rel = "noopener noreferrer";
     mapLink.textContent = "Open Google Maps ↗";
-
     details.appendChild(mapLink);
+
     card.appendChild(details);
     content.appendChild(card);
   }
 
   function renderSafeText(container, text) {
-    // Build links using DOM nodes only; never inject response text as HTML.
+    // Convert URLs to safe links without inserting server text as HTML.
     const urlPattern = /https?:\/\/[^\s<>()"']+/gi;
     const source = String(text || "");
     let cursor = 0;
@@ -723,7 +514,6 @@
 
       try {
         const parsed = new URL(url);
-
         if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
           throw new Error("Unsafe URL");
         }
@@ -788,7 +578,6 @@
     const bubble = document.createElement("div");
     bubble.className = "bubble";
     renderSafeText(bubble, text);
-
     content.append(label, bubble);
 
     if (kind === "bot") {
@@ -827,7 +616,9 @@
   }
 
   function stopSpeaking() {
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
   }
 
   async function askQuestion(question) {
@@ -874,12 +665,10 @@
       if (readAloud) speak(answer);
     } catch (error) {
       typing.remove();
-
       addMessage(
         "I couldn't connect to the chatbot server. Please try again. If the problem continues, the service may be waking up or temporarily unavailable.",
         "bot"
       );
-
       status.textContent = "Connection issue";
     } finally {
       busy = false;
@@ -902,8 +691,11 @@
 
   document.querySelectorAll("[data-view]").forEach(button => {
     button.addEventListener("click", () => {
-      if (button.dataset.view === "dashboard") showDashboard();
-      else showChatView();
+      if (button.dataset.view === "dashboard") {
+        showDashboard();
+      } else {
+        showChatView();
+      }
     });
   });
 
@@ -912,6 +704,7 @@
     messages.replaceChildren();
     input.value = "";
     status.textContent = "Ready";
+    hint.textContent = "Check important details with official GZU sources.";
     showChatView();
     scrollToBottom();
     input.focus();
@@ -922,8 +715,8 @@
     messages.replaceChildren();
     input.value = "";
     status.textContent = "Ready";
-    showChatView();
     hint.textContent = "Conversation cleared from this screen.";
+    showChatView();
     input.focus();
   });
 
@@ -968,8 +761,7 @@
 
     recognition.onerror = () => {
       status.textContent = "Microphone unavailable";
-      hint.textContent =
-        "Check your browser microphone permission and try again.";
+      hint.textContent = "Check your browser microphone permission and try again.";
     };
 
     recognition.onend = () => {
@@ -981,16 +773,14 @@
       try {
         recognition.start();
       } catch (error) {
-        hint.textContent =
-          "The microphone is already active. Please wait and try again.";
+        hint.textContent = "The microphone is already active. Please wait and try again.";
       }
     });
   } else {
     micButton.addEventListener("click", () => {
       hint.textContent =
-        "Speech recognition isn't supported by this browser. Try a browser that supports web speech recognition, or type your question.";
+        "Speech recognition isn't supported by this browser. Try a browser that supports it, or type your question.";
     });
-
     micButton.title = "Speech recognition not supported by this browser";
   }
 
