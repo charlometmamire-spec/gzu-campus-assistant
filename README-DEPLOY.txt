@@ -1,44 +1,79 @@
-# GZU Campus Assistant — Consolidated Update Package
+GZU CAMPUS ASSISTANT — RELEASE PACKAGE
+=====================================
 
-## Included files
-- `app.py` — consolidated routing for greetings, general GZU questions, student services, conduct information, campus locations, and separate unrelated-question handling.
-- `templates/index.html` — preserves the existing green interface and adds useful starter questions for About GZU, Explore GZU, and Conduct Information.
-- `static/manifest.json` — PWA metadata.
-- `static/service-worker.js` — caches the app shell/static assets and deliberately does not cache POST `/chat` responses.
-- `static/icons/icon-192.png` and `static/icons/icon-512.png` — app icons.
-- `static/offline.html` — optional standalone offline information page.
+This package is intended to replace the project files in the existing GitHub
+repository, then let the connected Render service deploy from GitHub.
+It does not upload anything to GitHub or change Render settings for you.
 
-## IMPORTANT deployment notes
-1. Back up the current `app.py` and `templates/index.html` in GitHub before replacing them.
-2. Replace `app.py` with the package version.
-3. Replace `templates/index.html` with the package version.
-4. In the existing `static` folder, add/replace `manifest.json` and `service-worker.js`, add the `icons` folder with both PNG files, and optionally add `offline.html`.
-5. **Keep the current `campus_chatbot.db`, `campus_directory.json`, and `requirements.txt` unchanged.** The package intentionally does not include replacement copies of those files.
-6. Wait for Render to deploy, then check `/health`, `/manifest.json`, and `/service-worker.js`, and try the starter prompts.
+BEFORE DEPLOYING
+----------------
+1. Download/keep a backup of the current GitHub repository.
+2. Extract this ZIP. Open the folder named gzu-campus-assistant-main.
+3. Upload/replace the files and folders inside that folder in the ROOT of the
+   existing GitHub repository. Keep the same repository and Render service.
+4. Do not delete the existing campus_chatbot.db or campus_directory.json.
+   The supplied copies are included for a complete package, but if the live
+   repository has newer records, keep those live copies instead.
+5. Commit the changes. Render should deploy automatically from GitHub.
+6. Do not put GEMINI_API_KEY in any file or in GitHub.
 
-## Scope and honest limitations
-- The “Explore GZU” prompt links users to the official GZU website and explains that a verified photo gallery is not currently integrated. No unverified image URLs were invented.
-- Student services and conduct responses direct users to official information because a complete, verified service list and current conduct regulations were not confirmed in this package.
-- The existing campus directory may contain entries marked unverified; the UI/backend should continue to disclose that limitation.
-- A PWA can cache the interface, but chatbot answers still need a network connection. The service worker does not cache dynamic chat answers.
-- A full runtime smoke test could not be completed in this environment because Flask is not installed here. Run the final check on Render after deployment.
+RENDER SETTINGS
+---------------
+The app reads GEMINI_API_KEY from the Render environment. You previously
+configured this variable; keep it private and do not send it in chat. The
+optional GEMINI_MODEL defaults to gemini-2.5-flash. No code change is needed
+for the key itself. If the key is missing, invalid, or over quota, the app
+falls back to its stored FAQ response rather than crashing.
 
+AFTER DEPLOYMENT: CHECK THESE URLS
+---------------------------------
+https://gzu-campus-assistant.onrender.com/health
+https://gzu-campus-assistant.onrender.com/manifest.json
+https://gzu-campus-assistant.onrender.com/service-worker.js
 
-## Optional Gemini answer formatting (free-tier API, subject to Google's quotas)
-The app works without Gemini and returns the original FAQ answer. To enable AI
-formatting in Render, add this environment variable in Render → Service →
-Environment:
+Then test the chat with:
+- a greeting (e.g. Hello)
+- a fee/payment question
+- an admissions question
+- an examination/results question
+- a Mashava-specific question
+- a campus directory place name and a directions question
+- an unrelated question
 
-- `GEMINI_API_KEY` = your key from Google AI Studio
-- Optional `GEMINI_MODEL` = `gemini-2.5-flash` (default)
+LIVE OFFICIAL INFORMATION
+-------------------------
+For general university questions, the app selects relevant pages from the
+official GZU website (www.gzu.ac.zw) and the official GZU e-learning domain
+(elearning.gzu.ac.zw), extracts page text, and asks Gemini to answer only from
+those extracts. The notices page is included to help surface current notices.
+Retrieved page text is cached in memory for 15 minutes to reduce repeated
+requests. This is live website retrieval, not a guarantee that the GZU site is
+reachable or that every answer is present on the site. If Gemini is unavailable but official page text was retrieved, the app now
+shows relevant source extracts directly (with their official URLs) instead of
+discarding the live evidence. If the website itself is unreachable or returns
+no relevant text, the existing FAQ fallback is used. Where retrieved fee
+extracts contain both 60% and 75% deposit figures, the answer explicitly flags
+the conflict and directs students to confirm with the GZU Bursar/Accounts
+Office. Confirm changing fees, deadlines, and personal account matters with
+the relevant official GZU office/portal.
 
-Gemini is only used to rephrase an answer already found in the FAQ database. It
-is not allowed to add facts. Campus-location results and curated responses do
-not pass through Gemini. If the key is absent, quota is exceeded, or the API is
-unavailable, the original answer is returned. Never commit the API key to GitHub.
+CAMPUS LOCATIONS
+----------------
+The existing campus directory data and matching functions are preserved. The
+location lookup is kept separate and runs before live website/Gemini handling.
+Directory entries marked unverified remain explicitly identified as such.
+Do not treat a Mashava-specific detail as applying to another campus.
 
-## Icon replacement
-The generated GZU robot icon is supplied as `static/icons/icon-192.png` and
-`static/icons/icon-512.png`, retaining the exact filenames referenced by the
-existing PWA manifest. The service-worker cache was bumped to v2 so deployed
-browsers can refresh the static assets.
+OFFLINE BEHAVIOUR
+-----------------
+The service worker caches the app shell/static files. The stored FAQ database
+can answer matching questions while the app server is running, but live
+website retrieval and Gemini require an internet connection. This is not a
+fully offline hosted chatbot: the browser cannot contact the Render server
+when the device has no connection.
+
+SECURITY
+--------
+Never commit API keys. The app only queries a fixed list of official GZU URLs
+and rejects redirects outside the official GZU domains. The key is sent only
+to Google's Gemini API when an answer is requested.

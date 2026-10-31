@@ -1,0 +1,50 @@
+GZU CAMPUS ASSISTANT — RELEASE CANDIDATE 2 CHECK REPORT
+Date: 31 October 2026
+
+CHECKS COMPLETED IN THIS ENVIRONMENT
+------------------------------------
+PASS  Python syntax compilation of app.py.
+PASS  JavaScript syntax check of static/service-worker.js (Node.js).
+PASS  Campus directory JSON parses successfully.
+PASS  SQLite database integrity_check returns ok.
+PASS  PWA manifest JSON parses and references the included icons.
+PASS  Icon files are valid PNG files at 192x192 and 512x512.
+PASS  Campus location implementation functions compared against the original
+      project and are byte-for-byte unchanged at source level: directory
+      choices, facility aliases, facility matching, campus location lookup,
+      and direction intent.
+PASS  Official website lookup selects topic-directed official GZU pages,
+      uses a bounded timeout, an in-process cache, bounded page reads, and
+      redirect-domain validation.
+PASS  HTML extraction handles nested hidden elements.
+PASS  New deterministic fallback was tested with mocked official page extracts:
+      it returns source-linked extracts when Gemini is unavailable and flags
+      a 60%/75% fee-deposit conflict rather than choosing one figure.
+PASS  Package excludes Python bytecode/cache folders.
+
+NOT VERIFIED — IMPORTANT LIMITATIONS
+------------------------------------
+NOT VERIFIED  Live reachability/current contents of GZU pages from this
+              environment; outbound DNS/network access is unavailable here.
+NOT VERIFIED  Live Gemini response using the private Render API key. The key
+              was not accessed and must never be shared.
+NOT VERIFIED  Full Flask HTTP runtime smoke test in this environment because
+              Flask is not installed here and package installation could not
+              reach the network.
+NOT VERIFIED  A new Render deployment of this package. No GitHub push or Render
+              change was performed by this assistant.
+
+WHAT CHANGED IN THIS CANDIDATE
+------------------------------
+When official page text is successfully retrieved but Gemini is unavailable,
+the app now presents the relevant official extracts and source URLs directly.
+It no longer discards retrieved live evidence and immediately falls back to
+the older FAQ. If official pages cannot be reached or yield no relevant text,
+the existing FAQ fallback remains available. When retrieved fee extracts show
+both 60% and 75%, the app flags the discrepancy and directs students to verify
+with the GZU Bursar/Accounts Office.
+
+This report distinguishes static/local checks from live external checks. It is
+not a claim that all GZU information is present or that external services are
+currently reachable. Campus-specific facts must not be generalized between
+campuses. Current notices and direct university confirmation remain authoritative.

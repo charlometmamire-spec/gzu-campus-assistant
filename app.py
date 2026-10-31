@@ -803,89 +803,267 @@ def polish_with_gemini(question, grounded_answer):
 
 
 # ---------------------------------------------------------
-# LIVE OFFICIAL GZU WEBSITE LOOKUP (best-effort, cached per request)
+# LIVE OFFICIAL GZU WEBSITE LOOKUP
 # ---------------------------------------------------------
 from html.parser import HTMLParser
+import threading
 import time
 
-OFFICIAL_GZU_PAGES = [
-    "https://www.gzu.ac.zw/",
-    "https://www.gzu.ac.zw/category/notices/",
-    "https://www.gzu.ac.zw/admissions/",
-    "https://www.gzu.ac.zw/registration/",
-    "https://www.gzu.ac.zw/fees-structure/",
-    "https://www.gzu.ac.zw/examinations/",
-    "https://www.gzu.ac.zw/undergraduate-programmes/",
-    "https://www.gzu.ac.zw/documents/",
-    "https://www.gzu.ac.zw/contact-us-2/",
-    "https://elearning.gzu.ac.zw/accepted/",
-]
+# Only pages on GZU-controlled official domains are queried. Pages are selected
+# by topic rather than making a slow request to every page for every question.
+OFFICIAL_GZU_PAGES = {
+    "home": "https://www.gzu.ac.zw/",
+    "notices": "https://www.gzu.ac.zw/category/notices/",
+    "admissions": "https://www.gzu.ac.zw/admissions/",
+    "registration": "https://www.gzu.ac.zw/registration/",
+    "fees": "https://www.gzu.ac.zw/fees-structure/",
+    "examinations": "https://www.gzu.ac.zw/examinations/",
+    "programmes": "https://www.gzu.ac.zw/undergraduate-programmes/",
+    "documents": "https://www.gzu.ac.zw/documents/",
+    "contacts": "https://www.gzu.ac.zw/contact-us-2/",
+    "accepted_students": "https://elearning.gzu.ac.zw/accepted/",
+}
 
 class _VisibleTextParser(HTMLParser):
-    def __init__(self):
-        super().__init__(); self.parts=[]; self.skip=0
-    def handle_starttag(self, tag, attrs):
-        if tag in ("script", "style", "nav", "footer", "header"):
-            self.skip += 1
-        if tag in ("p", "li", "h1", "h2", "h3", "br") and not self.skip:
-            self.parts.append("\n")
-    def handle_endtag(self, tag):
-        if tag in ("script", "style", "nav", "footer", "header") and self.skip:
-            self.skip -= 1
-    def handle_data(self, data):
-        if not self.skip and data.strip(): self.parts.append(data.strip())
+    """Extract readable page text while correctly ignoring nested hidden areas."""
+    HIDDEN = {"script", "style", "nav", "footer", "header", "noscript", "svg"}
 
-def retrieve_official_gzu_context(question, max_pages=4):
-    """Fetch official GZU pages only. Returns short relevance-ranked context or empty."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.hidden_stack = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.HIDDEN:
+            self.hidden_stack.append(tag)
+        if not self.hidden_stack and tag in {"p", "li", "h1", "h2", "h3", "h4", "br", "tr"}:
+            self.parts.append("\n")
+
+    def handle_startendtag(self, tag, attrs):
+        if not self.hidden_stack and tag == "br":
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in self.HIDDEN:
+            # HTML is imperfect; remove the matching hidden element and any
+            # malformed nested entries above it, without decrementing on an
+            # unrelated closing tag.
+            for index in range(len(self.hidden_stack) - 1, -1, -1):
+                if self.hidden_stack[index] == tag:
+                    del self.hidden_stack[index:]
+                    break
+        elif not self.hidden_stack and tag in {"p", "li", "h1", "h2", "h3", "h4", "tr"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self.hidden_stack and data.strip():
+            self.parts.append(data.strip())
+
+
+_OFFICIAL_PAGE_CACHE = {}
+_OFFICIAL_CACHE_LOCK = threading.Lock()
+_OFFICIAL_CACHE_TTL = 900
+_OFFICIAL_FETCH_TIMEOUT = 5
+_OFFICIAL_MAX_BYTES = 1_200_000
+
+
+def _official_pages_for_question(question):
+    q = normalize(question)
+    selected = ["notices"]
+    rules = [
+        ("fees", ("fee", "fees", "tuition", "payment", "pay", "deposit", "balance", "levy", "invoice")),
+        ("admissions", ("admission", "apply", "application", "applicant", "entry requirements", "enrol", "enroll", "intake")),
+        ("registration", ("registration", "register", "semester", "module", "course registration", "defer", "withdraw")),
+        ("examinations", ("exam", "examination", "timetable", "result", "results", "supplementary", "special exam")),
+        ("programmes", ("programme", "programmes", "program", "degree", "diploma", "study", "faculty", "department")),
+        ("documents", ("handbook", "regulation", "policy", "form", "forms", "document", "prospectus")),
+        ("contacts", ("contact", "phone", "email", "office", "address", "Mashava", "campus")),
+        ("accepted_students", ("accepted", "new student", "newly admitted", "portal", "online registration", "e-learning", "elearning")),
+    ]
+    for page, terms in rules:
+        if any(normalize(term) in q for term in terms):
+            selected.append(page)
+    if len(selected) == 1:
+        selected.extend(["home", "documents"])
+    # Preserve order and cap outbound requests to three official pages.
+    return list(dict.fromkeys(selected))[:3]
+
+
+def _fetch_official_page(page_key):
+    now = time.time()
+    with _OFFICIAL_CACHE_LOCK:
+        cached = _OFFICIAL_PAGE_CACHE.get(page_key)
+        if cached and now - cached[0] < _OFFICIAL_CACHE_TTL:
+            return cached[1], cached[2]
+    url = OFFICIAL_GZU_PAGES[page_key]
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; GZU-Campus-Assistant/2.0)",
+            "Accept": "text/html,application/xhtml+xml",
+        })
+        with urllib.request.urlopen(req, timeout=_OFFICIAL_FETCH_TIMEOUT) as response:
+            final_url = response.geturl()
+            if not final_url.startswith(("https://www.gzu.ac.zw/", "https://gzu.ac.zw/", "https://elearning.gzu.ac.zw/")):
+                return "", url
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "html" not in content_type:
+                return "", url
+            raw = response.read(_OFFICIAL_MAX_BYTES).decode("utf-8", "replace")
+        parser = _VisibleTextParser()
+        parser.feed(raw)
+        page_text = re.sub(r"\s+", " ", " ".join(parser.parts)).strip()
+        if page_text:
+            with _OFFICIAL_CACHE_LOCK:
+                _OFFICIAL_PAGE_CACHE[page_key] = (now, page_text, final_url)
+        return page_text, final_url
+    except Exception as exc:
+        app.logger.info("Official GZU page unavailable (%s): %s", page_key, exc)
+        return "", url
+
+
+def retrieve_official_gzu_context(question, max_pages=3):
+    """Return concise, relevance-ranked excerpts from selected official pages."""
     qwords = {w for w in normalize(question).split() if len(w) > 2}
-    if not qwords: return ""
-    collected=[]
-    for url in OFFICIAL_GZU_PAGES:
-        try:
-            req=urllib.request.Request(url, headers={"User-Agent":"GZU-Campus-Assistant/1.0 (official-site lookup)"})
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                if "text/html" not in resp.headers.get("Content-Type", ""): continue
-                raw=resp.read(900_000).decode("utf-8", "ignore")
-            parser=_VisibleTextParser(); parser.feed(raw)
-            text=re.sub(r"\s+", " ", " ".join(parser.parts)).strip()
-            words=set(normalize(text).split())
-            score=len(qwords & words)
-            if score:
-                # Keep bounded evidence, avoid flooding Gemini with entire pages.
-                chunks=[]
-                for sentence in re.split(r"(?<=[.!?])\s+", text):
-                    if len(qwords & set(normalize(sentence).split())) >= 1:
-                        chunks.append(sentence[:700])
-                snippet=" ".join(chunks[:8])[:3500] or text[:1800]
-                collected.append((score, url, snippet))
-        except Exception as exc:
-            app.logger.debug("Official GZU page lookup failed for %s: %s", url, exc)
-    collected.sort(key=lambda x:x[0], reverse=True)
-    return "\n\n".join(f"Source: {url}\nExtract: {snippet}" for _,url,snippet in collected[:max_pages])
+    if not qwords:
+        return ""
+    collected = []
+    for page_key in _official_pages_for_question(question)[:max_pages]:
+        page_text, url = _fetch_official_page(page_key)
+        if not page_text:
+            continue
+        sentences = re.split(r"(?<=[.!?])\s+", page_text)
+        ranked = []
+        for sentence in sentences:
+            normalized_words = set(normalize(sentence).split())
+            overlap = len(qwords & normalized_words)
+            if overlap:
+                ranked.append((overlap, sentence[:650]))
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        excerpt = " ".join(sentence for _, sentence in ranked[:10])[:4200]
+        if not excerpt and len(page_text) > 100:
+            excerpt = page_text[:1200]
+        if excerpt:
+            collected.append((sum(score for score, _ in ranked[:10]), url, excerpt))
+    collected.sort(key=lambda item: item[0], reverse=True)
+    return "\n\n".join(
+        f"Official source: {url}\nPage extracts: {excerpt}"
+        for _, url, excerpt in collected
+    )[:10500]
+
+
+def answer_from_official_context_fallback(question, context):
+    """Present relevant official extracts when Gemini is unavailable.
+
+    This keeps live GZU retrieval useful without making the API key a
+    single point of failure. It does not invent or paraphrase facts.
+    """
+    if not context:
+        return ""
+
+    question_words = {word for word in normalize(question).split() if len(word) > 2}
+    blocks = re.split(r"\n\n(?=Official source: )", context)
+    ranked_items = []
+    source_urls = []
+
+    for block in blocks:
+        source_match = re.search(r"Official source:\s*(https://[^\s]+)", block)
+        if not source_match:
+            continue
+        source_url = source_match.group(1).rstrip(".,)")
+        source_urls.append(source_url)
+        extract = block.split("Page extracts:", 1)[-1].strip()
+        for sentence in re.split(r"(?<=[.!?])\s+", extract):
+            sentence = sentence.strip()
+            if len(sentence) < 25:
+                continue
+            sentence_words = set(normalize(sentence).split())
+            overlap = len(question_words & sentence_words)
+            if overlap:
+                ranked_items.append((overlap, sentence))
+
+    # Keep only the strongest, unique source statements. Do not fabricate an
+    # answer if the official pages did not return relevant evidence.
+    ranked_items.sort(key=lambda item: item[0], reverse=True)
+    selected = []
+    seen = set()
+    for _, sentence in ranked_items:
+        key = normalize(sentence)
+        if key and key not in seen:
+            selected.append(sentence)
+            seen.add(key)
+        if len(selected) >= 6:
+            break
+
+    if not selected:
+        return ""
+
+    answer = (
+        "I found these relevant details on the official GZU website. "
+        "I am showing the page information directly because the AI answer "
+        "service is unavailable right now:\n\n"
+        + "\n".join(f"• {sentence}" for sentence in selected)
+    )
+
+    # Explicitly surface the known high-risk case where official fee pages
+    # may publish different deposit percentages. Do not choose one silently.
+    if ("fee" in question_words or "fees" in question_words or "tuition" in question_words):
+        joined = " ".join(selected)
+        percentages = set(re.findall(r"\b(\d{1,3})\s*%", joined))
+        if "60" in percentages and "75" in percentages:
+            answer += (
+                "\n\nImportant: the official extracts show conflicting "
+                "registration deposit percentages (60% and 75%). Please "
+                "confirm the current requirement with the GZU Bursar or "
+                "Accounts Office before making payment."
+            )
+
+    unique_sources = list(dict.fromkeys(source_urls))
+    if unique_sources:
+        answer += "\n\nOfficial source(s):\n" + "\n".join(unique_sources[:4])
+    answer += (
+        "\n\nPlease check the latest official notice or contact the "
+        "relevant university office for changes to fees, deadlines or "
+        "personal student-account matters."
+    )
+    return answer
 
 
 def answer_from_official_context(question, context):
-    if not GEMINI_API_KEY or not context: return ""
-    endpoint=("https://generativelanguage.googleapis.com/v1beta/models/"+
-             quote_plus(GEMINI_MODEL)+":generateContent?key="+quote_plus(GEMINI_API_KEY))
-    prompt=("You are the GZU Campus Assistant. Answer the student's question using ONLY "
-           "the official GZU website excerpts below. Do not guess or use outside knowledge. "
-           "If excerpts do not answer it, clearly say the website information found is insufficient "
-           "and direct the student to the relevant official office/page. Keep answer concise. "
-           "Include the source URL(s) used. Do not assume campus-specific facts apply to every campus.\n\n"
-           f"Question: {question}\n\nOfficial excerpts:\n{context}")
-    payload={"contents":[{"parts":[{"text":prompt}]}],
-             "generationConfig":{"temperature":0.1,"maxOutputTokens":600}}
+    if not GEMINI_API_KEY or not context:
+        return ""
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/models/" +
+        quote_plus(GEMINI_MODEL) + ":generateContent?key=" + quote_plus(GEMINI_API_KEY)
+    )
+    prompt = (
+        "You are the GZU Campus Assistant. Answer using ONLY the official GZU "
+        "website extracts below. Do not use outside knowledge or guess. If the "
+        "extracts do not answer the question, say the official information found "
+        "is insufficient and direct the student to the relevant GZU office. "
+        "Preserve dates, amounts, conditions and campus distinctions exactly. "
+        "Never generalise a Mashava-specific detail to another campus. Include "
+        "the source URL(s). Explain simply and concisely.\n\n"
+        f"Student question: {question}\n\nOfficial website extracts:\n{context}"
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 700},
+    }
     try:
-        req=urllib.request.Request(endpoint,data=json.dumps(payload).encode(),
-              headers={"Content-Type":"application/json"},method="POST")
-        with urllib.request.urlopen(req,timeout=12) as resp: result=json.loads(resp.read().decode())
-        candidates=result.get("candidates",[])
-        parts=candidates[0].get("content",{}).get("parts",[]) if candidates else []
-        answer="\n".join(p.get("text","").strip() for p in parts if p.get("text")).strip()
+        req = urllib.request.Request(
+            endpoint, data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        candidates = result.get("candidates", [])
+        parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+        answer = "\n".join(
+            part.get("text", "").strip() for part in parts if part.get("text")
+        ).strip()
         return answer
     except Exception as exc:
-        app.logger.info("Official-site Gemini answer unavailable: %s",exc)
+        app.logger.warning("Official-site Gemini answer unavailable: %s", exc)
         return ""
 
 # ---------------------------------------------------------
@@ -899,12 +1077,8 @@ def find_answer(message):
             "location": None,
         }
 
-    # Handle named campus topics first.
-    curated = general_gzu_answer(message)
-    if curated:
-        return curated
-
-    # Then check whether the user named a directory location.
+    # Campus directory/location matching is deliberately first and unchanged.
+    # Keep this path isolated from the live website and language-model features.
     location = find_campus_answer(message)
     if location:
         response = (
@@ -940,6 +1114,10 @@ def find_answer(message):
             "choices": names,
         }
 
+    curated = general_gzu_answer(message)
+    if curated:
+        return curated
+
     if is_clearly_off_topic(message):
         return {
             "response": (
@@ -958,7 +1136,18 @@ def find_answer(message):
     if live_answer:
         return {"response": live_answer, "location": None, "source": "official_gzu_website"}
 
-    # Fall back to the stored FAQ if live site/Gemini is unavailable.
+    # If the official pages were retrieved but Gemini is missing, over quota,
+    # or temporarily unavailable, show the relevant source extracts directly.
+    # This avoids discarding live evidence and falling straight to an old FAQ.
+    extracted_answer = answer_from_official_context_fallback(message, live_context)
+    if extracted_answer:
+        return {
+            "response": extracted_answer,
+            "location": None,
+            "source": "official_gzu_website_extracts",
+        }
+
+    # Fall back to the stored FAQ only when live official evidence is unavailable.
     answer = find_faq_answer(message)
     answer = polish_with_gemini(message, answer)
     return {"response": answer, "location": None}
