@@ -2,6 +2,8 @@ from pathlib import Path
 import json
 import re
 import sqlite3
+import os
+import urllib.request
 from difflib import SequenceMatcher
 from urllib.parse import quote_plus
 
@@ -737,6 +739,156 @@ def is_clearly_off_topic(message):
 
 
 # ---------------------------------------------------------
+# OPTIONAL GEMINI RESPONSE POLISHING
+# ---------------------------------------------------------
+# The deterministic FAQ/location routing remains the source of truth.
+# Gemini is only used to make an existing verified answer clearer; it is
+# instructed not to add facts. Without a key or on quota/network errors,
+# the original answer is returned unchanged.
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+
+
+def polish_with_gemini(question, grounded_answer):
+    if not GEMINI_API_KEY or not grounded_answer:
+        return grounded_answer
+
+    # Never send campus-location responses to the generative model. This keeps
+    # the carefully working location feature entirely untouched.
+    if isinstance(grounded_answer, dict) or not isinstance(grounded_answer, str):
+        return grounded_answer
+
+    if grounded_answer == unknown_answer():
+        return grounded_answer
+
+
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        + quote_plus(GEMINI_MODEL)
+        + ":generateContent?key=" + quote_plus(GEMINI_API_KEY)
+    )
+    payload = {
+        "contents": [{"parts": [{"text": (
+            "You are the GZU Campus Assistant. Rewrite the supplied verified "
+            "university answer in clear, concise, friendly language with neat "
+            "formatting. Do not add, infer, change, or omit factual details, "
+            "dates, percentages, requirements, or URLs. If uncertain, preserve "
+            "the wording. Return only the improved answer.\n\n"
+            "Student question: " + question + "\n\nVerified answer/context: "
+            + grounded_answer
+        )}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 500}
+    }
+
+    try:
+        req = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=8) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        candidates = result.get("candidates", [])
+        parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+        polished = "\n".join(
+            str(part.get("text", "")).strip() for part in parts
+            if part.get("text")
+        ).strip()
+        return polished if polished else grounded_answer
+    except Exception as exc:
+        app.logger.info("Gemini polishing unavailable; using verified answer: %s", exc)
+        return grounded_answer
+
+
+# ---------------------------------------------------------
+# LIVE OFFICIAL GZU WEBSITE LOOKUP (best-effort, cached per request)
+# ---------------------------------------------------------
+from html.parser import HTMLParser
+import time
+
+OFFICIAL_GZU_PAGES = [
+    "https://www.gzu.ac.zw/",
+    "https://www.gzu.ac.zw/category/notices/",
+    "https://www.gzu.ac.zw/admissions/",
+    "https://www.gzu.ac.zw/registration/",
+    "https://www.gzu.ac.zw/fees-structure/",
+    "https://www.gzu.ac.zw/examinations/",
+    "https://www.gzu.ac.zw/undergraduate-programmes/",
+    "https://www.gzu.ac.zw/documents/",
+    "https://www.gzu.ac.zw/contact-us-2/",
+    "https://elearning.gzu.ac.zw/accepted/",
+]
+
+class _VisibleTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__(); self.parts=[]; self.skip=0
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "nav", "footer", "header"):
+            self.skip += 1
+        if tag in ("p", "li", "h1", "h2", "h3", "br") and not self.skip:
+            self.parts.append("\n")
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "nav", "footer", "header") and self.skip:
+            self.skip -= 1
+    def handle_data(self, data):
+        if not self.skip and data.strip(): self.parts.append(data.strip())
+
+def retrieve_official_gzu_context(question, max_pages=4):
+    """Fetch official GZU pages only. Returns short relevance-ranked context or empty."""
+    qwords = {w for w in normalize(question).split() if len(w) > 2}
+    if not qwords: return ""
+    collected=[]
+    for url in OFFICIAL_GZU_PAGES:
+        try:
+            req=urllib.request.Request(url, headers={"User-Agent":"GZU-Campus-Assistant/1.0 (official-site lookup)"})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if "text/html" not in resp.headers.get("Content-Type", ""): continue
+                raw=resp.read(900_000).decode("utf-8", "ignore")
+            parser=_VisibleTextParser(); parser.feed(raw)
+            text=re.sub(r"\s+", " ", " ".join(parser.parts)).strip()
+            words=set(normalize(text).split())
+            score=len(qwords & words)
+            if score:
+                # Keep bounded evidence, avoid flooding Gemini with entire pages.
+                chunks=[]
+                for sentence in re.split(r"(?<=[.!?])\s+", text):
+                    if len(qwords & set(normalize(sentence).split())) >= 1:
+                        chunks.append(sentence[:700])
+                snippet=" ".join(chunks[:8])[:3500] or text[:1800]
+                collected.append((score, url, snippet))
+        except Exception as exc:
+            app.logger.debug("Official GZU page lookup failed for %s: %s", url, exc)
+    collected.sort(key=lambda x:x[0], reverse=True)
+    return "\n\n".join(f"Source: {url}\nExtract: {snippet}" for _,url,snippet in collected[:max_pages])
+
+
+def answer_from_official_context(question, context):
+    if not GEMINI_API_KEY or not context: return ""
+    endpoint=("https://generativelanguage.googleapis.com/v1beta/models/"+
+             quote_plus(GEMINI_MODEL)+":generateContent?key="+quote_plus(GEMINI_API_KEY))
+    prompt=("You are the GZU Campus Assistant. Answer the student's question using ONLY "
+           "the official GZU website excerpts below. Do not guess or use outside knowledge. "
+           "If excerpts do not answer it, clearly say the website information found is insufficient "
+           "and direct the student to the relevant official office/page. Keep answer concise. "
+           "Include the source URL(s) used. Do not assume campus-specific facts apply to every campus.\n\n"
+           f"Question: {question}\n\nOfficial excerpts:\n{context}")
+    payload={"contents":[{"parts":[{"text":prompt}]}],
+             "generationConfig":{"temperature":0.1,"maxOutputTokens":600}}
+    try:
+        req=urllib.request.Request(endpoint,data=json.dumps(payload).encode(),
+              headers={"Content-Type":"application/json"},method="POST")
+        with urllib.request.urlopen(req,timeout=12) as resp: result=json.loads(resp.read().decode())
+        candidates=result.get("candidates",[])
+        parts=candidates[0].get("content",{}).get("parts",[]) if candidates else []
+        answer="\n".join(p.get("text","").strip() for p in parts if p.get("text")).strip()
+        return answer
+    except Exception as exc:
+        app.logger.info("Official-site Gemini answer unavailable: %s",exc)
+        return ""
+
+# ---------------------------------------------------------
 # ANSWER ROUTING
 # ---------------------------------------------------------
 
@@ -799,8 +951,16 @@ def find_answer(message):
             "location": None,
         }
 
-    # General student questions continue to use the existing FAQ database.
+    # Prefer current official GZU website excerpts for general questions.
+    # Campus-location routing above is intentionally untouched.
+    live_context = retrieve_official_gzu_context(message)
+    live_answer = answer_from_official_context(message, live_context)
+    if live_answer:
+        return {"response": live_answer, "location": None, "source": "official_gzu_website"}
+
+    # Fall back to the stored FAQ if live site/Gemini is unavailable.
     answer = find_faq_answer(message)
+    answer = polish_with_gemini(message, answer)
     return {"response": answer, "location": None}
 
 

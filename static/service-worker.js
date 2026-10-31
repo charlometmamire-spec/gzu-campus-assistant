@@ -2,7 +2,7 @@
 /* GZU Campus Assistant service worker.
    Static assets may be cached; chat POST requests are always sent to the server. */
 
-const CACHE_NAME = "gzu-campus-assistant-v1";
+const CACHE_NAME = "gzu-campus-assistant-v2";
 
 const APP_SHELL = [
   "/",

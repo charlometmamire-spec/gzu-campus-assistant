@@ -22,3 +22,23 @@
 - The existing campus directory may contain entries marked unverified; the UI/backend should continue to disclose that limitation.
 - A PWA can cache the interface, but chatbot answers still need a network connection. The service worker does not cache dynamic chat answers.
 - A full runtime smoke test could not be completed in this environment because Flask is not installed here. Run the final check on Render after deployment.
+
+
+## Optional Gemini answer formatting (free-tier API, subject to Google's quotas)
+The app works without Gemini and returns the original FAQ answer. To enable AI
+formatting in Render, add this environment variable in Render → Service →
+Environment:
+
+- `GEMINI_API_KEY` = your key from Google AI Studio
+- Optional `GEMINI_MODEL` = `gemini-2.5-flash` (default)
+
+Gemini is only used to rephrase an answer already found in the FAQ database. It
+is not allowed to add facts. Campus-location results and curated responses do
+not pass through Gemini. If the key is absent, quota is exceeded, or the API is
+unavailable, the original answer is returned. Never commit the API key to GitHub.
+
+## Icon replacement
+The generated GZU robot icon is supplied as `static/icons/icon-192.png` and
+`static/icons/icon-512.png`, retaining the exact filenames referenced by the
+existing PWA manifest. The service-worker cache was bumped to v2 so deployed
+browsers can refresh the static assets.
