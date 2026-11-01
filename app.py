@@ -786,7 +786,7 @@ def _groq_post(payload, timeout=15):
     endpoint = "https://api.groq.com/openai/v1/chat/completions"
     req = urllib.request.Request(
         endpoint, data=json.dumps(body, ensure_ascii=True).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": "Bearer " + GROQ_API_KEY},
+        headers={"Content-Type": "application/json", "Authorization": "Bearer " + GROQ_API_KEY, "User-Agent": "GZU-Campus-Assistant/1.0 (Flask; Groq Python client-compatible)"},
         method="POST",
     )
     for attempt in range(2):
