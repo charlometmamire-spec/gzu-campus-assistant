@@ -750,7 +750,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip()
 # Google restricted Gemini 2.5 access for projects without prior usage (Sep 2026).
 # Try a current supported model if a configured/legacy model returns 404.
-GEMINI_FALLBACK_MODELS = ("gemini-3.8-flash", "gemini-3.5-flash-lite")
+GEMINI_FALLBACK_MODELS = ("gemini-3.5-flash-lite", "gemini-3.6-flash")
 
 def _gemini_model_candidates():
     ordered = [GEMINI_MODEL] + list(GEMINI_FALLBACK_MODELS)
@@ -1055,6 +1055,16 @@ def answer_from_official_context_fallback(question, context):
 def answer_from_official_context(question, context):
     if not GEMINI_API_KEY or not context:
         return ""
+    prompt = (
+        "You are the GZU Campus Assistant. Answer the student's question "
+        "using ONLY the official Great Zimbabwe University context below. "
+        "Be clear, concise, and helpful. Do not invent deadlines, fees, "
+        "requirements, contacts, or policies. If the context does not answer "
+        "the question, say what is missing and direct the student to the "
+        "relevant official GZU office or website.\n\n"
+        "Student question: " + str(question) + "\n\n"
+        "Official GZU context:\n" + str(context)
+    )
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.1, "maxOutputTokens": 700},
@@ -1069,6 +1079,33 @@ def answer_from_official_context(question, context):
         return answer
     except Exception as exc:
         app.logger.warning("Official-site Gemini answer unavailable: %s", exc)
+        return ""
+
+def answer_with_general_gemini(question):
+    """Answer non-GZU questions with Gemini's general knowledge, safely."""
+    if not GEMINI_API_KEY:
+        return ""
+    prompt = (
+        "You are a friendly, helpful general-purpose AI assistant embedded "
+        "in the GZU Campus Assistant. Answer the user's question accurately "
+        "and in plain language. For uncertain or time-sensitive facts, say "
+        "so and avoid pretending to have live information. For medical, "
+        "legal, financial, or safety-critical matters, give cautious general "
+        "information and recommend a qualified professional when appropriate.\n\n"
+        "User question: " + str(question)
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 700},
+    }
+    try:
+        result = _gemini_post(payload, timeout=12) or {}
+        candidates = result.get("candidates", [])
+        parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+        answer = "\n".join(str(part.get("text", "")).strip() for part in parts if part.get("text")).strip()
+        return answer
+    except Exception as exc:
+        app.logger.warning("General Gemini response unavailable: %s", exc)
         return ""
 
 # ---------------------------------------------------------
@@ -1158,17 +1195,6 @@ def find_answer(message):
     if curated:
         return curated
 
-    if is_clearly_off_topic(message):
-        return {
-            "response": (
-                "I’m the GZU Campus Assistant, designed to help with Great "
-                "Zimbabwe University information, campus facilities, student "
-                "processes and university services. Please ask a GZU-related "
-                "question and I’ll do my best to help."
-            ),
-            "location": None,
-        }
-
     # Prefer current official GZU website excerpts for general questions.
     # Campus-location routing above is intentionally untouched.
     live_context = retrieve_official_gzu_context(message)
@@ -1186,6 +1212,12 @@ def find_answer(message):
             "location": None,
             "source": "official_gzu_website_extracts",
         }
+
+    # General questions are answered by Gemini's general knowledge. This is
+    # deliberately after GZU live-context retrieval so campus facts stay grounded.
+    general_answer = answer_with_general_gemini(message)
+    if general_answer:
+        return {"response": general_answer, "location": None, "source": "gemini_general"}
 
     # Fall back to the stored FAQ only when live official evidence is unavailable.
     answer = find_faq_answer(message)

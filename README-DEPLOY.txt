@@ -21,9 +21,9 @@ RENDER SETTINGS
 ---------------
 The app reads GEMINI_API_KEY from the Render environment. You previously
 configured this variable; keep it private and do not send it in chat. The
-optional GEMINI_MODEL defaults to gemini-2.5-flash. No code change is needed
+optional GEMINI_MODEL defaults to gemini-3.8-flash. No code change is needed
 for the key itself. If the key is missing, invalid, or over quota, the app
-falls back to its stored FAQ response rather than crashing.
+falls back to a readable stored FAQ response when available rather than crashing.
 
 AFTER DEPLOYMENT: CHECK THESE URLS
 ---------------------------------
