@@ -1400,9 +1400,22 @@ def chat():
             "location": None,
         }), 400
 
-    result = find_answer(message)
-    log_chat(message, result["response"])
-    return jsonify(result)
+    try:
+        result = find_answer(message)
+        log_chat(message, result["response"])
+        return jsonify(result)
+    except Exception as exc:
+        # Keep the chat endpoint alive if both AI providers or a source fail.
+        app.logger.exception("Chat request failed safely (%s)", type(exc).__name__)
+        return jsonify({
+            "response": (
+                "I'm temporarily unable to reach the AI service. Please try again "
+                "in a little while. Campus directions and directory information "
+                "remain available."
+            ),
+            "location": None,
+            "source": "temporary_service_fallback",
+        }), 200
 
 
 if __name__ == "__main__":
