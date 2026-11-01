@@ -763,10 +763,10 @@ GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 
 
 def _ai_provider_ready():
-    return bool(GROQ_API_KEY) if AI_PROVIDER == "groq" else bool(GEMINI_API_KEY)
+    return bool(GROQ_API_KEY) or bool(GEMINI_API_KEY)
 
 
-def _groq_post(payload, timeout=15):
+def _groq_post(payload, timeout=15, use_browser_search=False):
     """Call Groq's OpenAI-compatible API and return Gemini-shaped data
     so the existing answer-routing functions remain unchanged."""
     if not GROQ_API_KEY:
@@ -781,12 +781,15 @@ def _groq_post(payload, timeout=15):
         "model": GROQ_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": generation.get("temperature", 0.2),
-        "max_tokens": generation.get("maxOutputTokens", 700),
+        "max_completion_tokens": generation.get("maxOutputTokens", 700),
     }
+    if use_browser_search and GROQ_MODEL == "openai/gpt-oss-120b":
+        body["tools"] = [{"type": "browser_search"}]
+        body["tool_choice"] = "auto"
     endpoint = "https://api.groq.com/openai/v1/chat/completions"
     req = urllib.request.Request(
         endpoint, data=json.dumps(body, ensure_ascii=True).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": "Bearer " + GROQ_API_KEY, "User-Agent": "GZU-Campus-Assistant/1.0 (Flask; Groq Python client-compatible)"},
+        headers={"Content-Type": "application/json", "Authorization": "Bearer " + GROQ_API_KEY},
         method="POST",
     )
     for attempt in range(2):
@@ -814,12 +817,40 @@ def _groq_post(payload, timeout=15):
     return None
 
 
-def _gemini_post(payload, timeout=15):
-    """Provider dispatcher: Groq or Gemini, with compatible return shape."""
-    if AI_PROVIDER == "groq":
-        return _groq_post(payload, timeout=timeout)
+def _question_needs_web_search(payload):
+    """Conservatively detect requests needing current/web-grounded evidence."""
+    parts = payload.get("contents", [{}])[0].get("parts", [])
+    prompt = " ".join(str(part.get("text", "")) for part in parts if part.get("text")).lower()
+    markers = (
+        "current", "latest", "today", "this week", "this month", "deadline",
+        "timetable", "exam date", "notice", "who is the dean", "dean of",
+        "staff member", "vice chancellor", "director", "contact details",
+        "recent", "news", "on the website", "gzu.ac.zw", "verify",
+        "search the web", "search online", "university official",
+    )
+    return any(marker in prompt for marker in markers)
+
+
+def _gemini_post(payload, timeout=15, use_browser_search=None):
+    """Groq primary with Gemini backup (or reverse if configured otherwise)."""
+    groq_first = AI_PROVIDER == "groq"
+    if groq_first and GROQ_API_KEY:
+        try:
+            return _groq_post(payload, timeout=timeout,
+                             use_browser_search=(_question_needs_web_search(payload) if use_browser_search is None else use_browser_search))
+        except Exception as exc:
+            app.logger.warning("Primary Groq failed; attempting Gemini backup (%s)", type(exc).__name__)
+
     if not GEMINI_API_KEY:
+        if not groq_first and GROQ_API_KEY:
+            try:
+                return _groq_post(payload, timeout=timeout,
+                                 use_browser_search=_question_needs_web_search(payload))
+            except Exception as exc:
+                app.logger.warning("Groq backup failed (%s)", type(exc).__name__)
+        app.logger.warning("Gemini backup unavailable: GEMINI_API_KEY is not configured")
         return None
+
     last_error = None
     for model in _gemini_model_candidates():
         endpoint = (
@@ -828,13 +859,9 @@ def _gemini_post(payload, timeout=15):
         )
         req = urllib.request.Request(
             endpoint, data=json.dumps(payload, ensure_ascii=True).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": GEMINI_API_KEY,
-            }, method="POST",
+            headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY},
+            method="POST",
         )
-        # Retry transient overload/rate-limit failures once. Do not retry 400/401
-        # errors, and keep the retry bounded so Render requests do not hang.
         for attempt in range(2):
             try:
                 with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -848,14 +875,21 @@ def _gemini_post(payload, timeout=15):
                     app.logger.warning("Gemini returned HTTP %s; retrying once", exc.code)
                     time.sleep(0.6)
                     continue
-                raise
+                break
             except (TimeoutError, urllib.error.URLError) as exc:
                 last_error = exc
                 if attempt == 0:
-                    app.logger.warning("Gemini connection timed out/failed; retrying once")
                     time.sleep(0.6)
                     continue
-                raise
+                break
+
+    if not groq_first and GROQ_API_KEY:
+        try:
+            app.logger.warning("Primary Gemini failed; attempting Groq backup")
+            return _groq_post(payload, timeout=timeout,
+                             use_browser_search=_question_needs_web_search(payload))
+        except Exception as backup_exc:
+            app.logger.warning("Groq backup failed (%s)", type(backup_exc).__name__)
     if last_error:
         raise last_error
     return None
@@ -1147,7 +1181,7 @@ def answer_from_official_context(question, context):
         "generationConfig": {"temperature": 0.1, "maxOutputTokens": 700},
     }
     try:
-        result = _gemini_post(payload, timeout=15) or {}
+        result = _gemini_post(payload, timeout=15, use_browser_search=True) or {}
         candidates = result.get("candidates", [])
         parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
         answer = "\n".join(
