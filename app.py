@@ -747,7 +747,41 @@ def is_clearly_off_topic(message):
 # the original answer is returned unchanged.
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip()
+# Google restricted Gemini 2.5 access for projects without prior usage (Sep 2026).
+# Try a current supported model if a configured/legacy model returns 404.
+GEMINI_FALLBACK_MODELS = ("gemini-3.8-flash", "gemini-3.5-flash-lite")
+
+def _gemini_model_candidates():
+    ordered = [GEMINI_MODEL] + list(GEMINI_FALLBACK_MODELS)
+    return list(dict.fromkeys(model for model in ordered if model))
+
+def _gemini_post(payload, timeout=15):
+    if not GEMINI_API_KEY:
+        return None
+    last_error = None
+    for model in _gemini_model_candidates():
+        endpoint = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            + quote_plus(model) + ":generateContent?key=" + quote_plus(GEMINI_API_KEY)
+        )
+        req = urllib.request.Request(
+            endpoint, data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            # A 404 for 2.5 commonly means the project is not eligible; try current models.
+            if exc.code == 404:
+                app.logger.warning("Gemini model %s returned 404; trying fallback model", model)
+                continue
+            raise
+    if last_error:
+        raise last_error
+    return None
 
 
 def polish_with_gemini(question, grounded_answer):
@@ -763,11 +797,6 @@ def polish_with_gemini(question, grounded_answer):
         return grounded_answer
 
 
-    endpoint = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        + quote_plus(GEMINI_MODEL)
-        + ":generateContent?key=" + quote_plus(GEMINI_API_KEY)
-    )
     payload = {
         "contents": [{"parts": [{"text": (
             "You are the GZU Campus Assistant. Rewrite the supplied verified "
@@ -782,14 +811,7 @@ def polish_with_gemini(question, grounded_answer):
     }
 
     try:
-        req = urllib.request.Request(
-            endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=8) as response:
-            result = json.loads(response.read().decode("utf-8"))
+        result = _gemini_post(payload, timeout=8) or {}
         candidates = result.get("candidates", [])
         parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
         polished = "\n".join(
@@ -1033,31 +1055,12 @@ def answer_from_official_context_fallback(question, context):
 def answer_from_official_context(question, context):
     if not GEMINI_API_KEY or not context:
         return ""
-    endpoint = (
-        "https://generativelanguage.googleapis.com/v1beta/models/" +
-        quote_plus(GEMINI_MODEL) + ":generateContent?key=" + quote_plus(GEMINI_API_KEY)
-    )
-    prompt = (
-        "You are the GZU Campus Assistant. Answer using ONLY the official GZU "
-        "website extracts below. Do not use outside knowledge or guess. If the "
-        "extracts do not answer the question, say the official information found "
-        "is insufficient and direct the student to the relevant GZU office. "
-        "Preserve dates, amounts, conditions and campus distinctions exactly. "
-        "Never generalise a Mashava-specific detail to another campus. Include "
-        "the source URL(s). Explain simply and concisely.\n\n"
-        f"Student question: {question}\n\nOfficial website extracts:\n{context}"
-    )
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.1, "maxOutputTokens": 700},
     }
     try:
-        req = urllib.request.Request(
-            endpoint, data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}, method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=15) as response:
-            result = json.loads(response.read().decode("utf-8"))
+        result = _gemini_post(payload, timeout=15) or {}
         candidates = result.get("candidates", [])
         parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
         answer = "\n".join(
@@ -1074,7 +1077,7 @@ def answer_from_official_context(question, context):
 
 def _is_greeting(message):
     text = normalize(message).strip(" !.,?\t")
-    return text in {"hi", "hello", "hey", "hiya", "good morning", "good afternoon", "good evening", "greetings", "how are you", "whats up", "what is up"}
+    return text in {"hi", "hello", "hey", "hiya", "hie", "hie there", "mhoro", "good morning", "good afternoon", "good evening", "greetings", "how are you", "whats up", "what is up"}
 
 
 def _greeting_response(message):
