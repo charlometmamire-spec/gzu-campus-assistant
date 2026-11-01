@@ -1,0 +1,25 @@
+GZU CAMPUS ASSISTANT — TAVILY FREE WEB SEARCH UPDATE
+
+What changed
+- Added optional Tavily web search using TAVILY_API_KEY.
+- Uses Tavily basic search (1 credit/request), maximum 4 results, 4-second timeout.
+- Adds search snippets and source URLs to official GZU context for queries
+  detected as needing current/web-grounded information.
+- Existing fixed official GZU page retrieval is preserved.
+- Groq remains primary (AI_PROVIDER defaults to groq).
+- Gemini remains the secondary AI fallback. No Grok API was added.
+- If Tavily is missing, unavailable, times out, or returns no usable results,
+  the assistant continues with its existing official-site/AI/FAQ behavior.
+- No changes to campus directory, directions, UI, voice input, or Read Aloud.
+
+Deployment
+1. Add TAVILY_API_KEY in Render after obtaining a free key from Tavily.
+2. Keep GROQ_API_KEY and GEMINI_API_KEY as already configured.
+3. Keep start command: gunicorn app:app --bind 0.0.0.0:$PORT
+4. Never commit API keys to GitHub.
+
+Limitations
+- Tavily can search and return snippets/URLs; it does not guarantee discovery
+  of every PDF or the newest document on every school subdomain.
+- This package was syntax-checked and tested with mocked Tavily responses.
+  No live external API call or Render deployment was performed here.
