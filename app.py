@@ -757,8 +757,57 @@ def _gemini_model_candidates():
     ordered = [GEMINI_MODEL] + list(GEMINI_FALLBACK_MODELS)
     return list(dict.fromkeys(model for model in ordered if model))
 
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+
+
+def _groq_post(payload, timeout=15):
+    """Call Groq's OpenAI-compatible API and return Gemini-shaped data
+    so the existing answer-routing functions remain unchanged."""
+    if not GROQ_API_KEY:
+        app.logger.warning("AI_PROVIDER is groq but GROQ_API_KEY is not configured")
+        return None
+    parts = payload.get("contents", [{}])[0].get("parts", [])
+    prompt = "\n".join(str(part.get("text", "")) for part in parts if part.get("text"))
+    generation = payload.get("generationConfig", {})
+    body = {
+        "model": GROQ_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": generation.get("temperature", 0.2),
+        "max_tokens": generation.get("maxOutputTokens", 700),
+    }
+    endpoint = "https://api.groq.com/openai/v1/chat/completions"
+    req = urllib.request.Request(
+        endpoint, data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": "Bearer " + GROQ_API_KEY},
+        method="POST",
+    )
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                raw = json.loads(response.read().decode("utf-8"))
+                answer = raw.get("choices", [{}])[0].get("message", {}).get("content", "")
+                return {"candidates": [{"content": {"parts": [{"text": answer}]}}] if answer else []}
+        except urllib.error.HTTPError as exc:
+            app.logger.warning("Groq API returned HTTP %s", exc.code)
+            if exc.code in (429, 500, 502, 503, 504) and attempt == 0:
+                time.sleep(0.7)
+                continue
+            raise
+        except (TimeoutError, urllib.error.URLError) as exc:
+            app.logger.warning("Groq connection timed out/failed")
+            if attempt == 0:
+                time.sleep(0.7)
+                continue
+            raise
+    return None
+
+
 def _gemini_post(payload, timeout=15):
-    """Call Gemini with bounded retry and safe model fallback behavior."""
+    """Provider dispatcher: Groq or Gemini, with compatible return shape."""
+    if AI_PROVIDER == "groq":
+        return _groq_post(payload, timeout=timeout)
     if not GEMINI_API_KEY:
         return None
     last_error = None
