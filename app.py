@@ -762,6 +762,10 @@ AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
 
 
+def _ai_provider_ready():
+    return bool(GROQ_API_KEY) if AI_PROVIDER == "groq" else bool(GEMINI_API_KEY)
+
+
 def _groq_post(payload, timeout=15):
     """Call Groq's OpenAI-compatible API and return Gemini-shaped data
     so the existing answer-routing functions remain unchanged."""
@@ -779,7 +783,7 @@ def _groq_post(payload, timeout=15):
     }
     endpoint = "https://api.groq.com/openai/v1/chat/completions"
     req = urllib.request.Request(
-        endpoint, data=json.dumps(body).encode("utf-8"),
+        endpoint, data=json.dumps(body, ensure_ascii=True).encode("utf-8"),
         headers={"Content-Type": "application/json", "Authorization": "Bearer " + GROQ_API_KEY},
         method="POST",
     )
@@ -817,7 +821,7 @@ def _gemini_post(payload, timeout=15):
             + quote_plus(model) + ":generateContent"
         )
         req = urllib.request.Request(
-            endpoint, data=json.dumps(payload).encode("utf-8"),
+            endpoint, data=json.dumps(payload, ensure_ascii=True).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "x-goog-api-key": GEMINI_API_KEY,
@@ -852,7 +856,7 @@ def _gemini_post(payload, timeout=15):
 
 
 def polish_with_gemini(question, grounded_answer):
-    if not GEMINI_API_KEY or not grounded_answer:
+    if not _ai_provider_ready() or not grounded_answer:
         return grounded_answer
 
     # Never send campus-location responses to the generative model. This keeps
@@ -887,7 +891,7 @@ def polish_with_gemini(question, grounded_answer):
         ).strip()
         return polished if polished else grounded_answer
     except Exception as exc:
-        app.logger.info("Gemini polishing unavailable; using verified answer: %s", exc)
+        app.logger.info("%s polishing unavailable; using verified answer: %s", AI_PROVIDER, exc)
         return grounded_answer
 
 
@@ -1120,7 +1124,7 @@ def answer_from_official_context_fallback(question, context):
 
 
 def answer_from_official_context(question, context):
-    if not GEMINI_API_KEY or not context:
+    if not _ai_provider_ready() or not context:
         return ""
     prompt = (
         "You are the GZU Campus Assistant. Answer the student's question "
@@ -1145,12 +1149,12 @@ def answer_from_official_context(question, context):
         ).strip()
         return answer
     except Exception as exc:
-        app.logger.warning("Official-site Gemini answer unavailable: %s", exc)
+        app.logger.warning("Official-site %s answer unavailable: %s", AI_PROVIDER, exc)
         return ""
 
 def answer_with_general_gemini(question):
     """Answer non-GZU questions with Gemini's general knowledge, safely."""
-    if not GEMINI_API_KEY:
+    if not _ai_provider_ready():
         return ""
     prompt = (
         "You are a friendly, helpful general-purpose AI assistant embedded "
@@ -1172,7 +1176,7 @@ def answer_with_general_gemini(question):
         answer = "\n".join(str(part.get("text", "")).strip() for part in parts if part.get("text")).strip()
         return answer
     except Exception as exc:
-        app.logger.warning("General Gemini response unavailable: %s", exc)
+        app.logger.warning("General %s response unavailable: %s", AI_PROVIDER, exc)
         return ""
 
 # ---------------------------------------------------------
@@ -1181,7 +1185,7 @@ def answer_with_general_gemini(question):
 
 def _is_greeting(message):
     text = normalize(message).strip(" !.,?\t")
-    return text in {"hi", "hello", "hey", "hiya", "hie", "hie there", "mhoro", "good morning", "good afternoon", "good evening", "greetings", "how are you", "whats up", "what is up"}
+    return text in {"hi", "hello", "hey", "hiya", "hie", "hie there", "mhoro", "good morning", "good afternoon", "good evening", "greetings", "how are you", "whats up", "what is up"} or bool(re.match(r"^(hi|hello|hey|hie|hiya|mhoro)\b.*\b(how are you|how r u|how are u|whats up|what is up)\b", text))
 
 
 def _greeting_response(message):
