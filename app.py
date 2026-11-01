@@ -759,7 +759,7 @@ def _gemini_model_candidates():
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").strip().lower()
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 
 
 def _ai_provider_ready():
@@ -796,7 +796,11 @@ def _groq_post(payload, timeout=15):
                 answer = raw.get("choices", [{}])[0].get("message", {}).get("content", "")
                 return {"candidates": [{"content": {"parts": [{"text": answer}]}}] if answer else []}
         except urllib.error.HTTPError as exc:
-            app.logger.warning("Groq API returned HTTP %s", exc.code)
+            try:
+                error_detail = exc.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                error_detail = "(response body unavailable)"
+            app.logger.warning("Groq API returned HTTP %s: %s", exc.code, error_detail)
             if exc.code in (429, 500, 502, 503, 504) and attempt == 0:
                 time.sleep(0.7)
                 continue
