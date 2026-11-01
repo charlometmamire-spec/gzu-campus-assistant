@@ -19,31 +19,11 @@ BEFORE DEPLOYING
 
 RENDER SETTINGS
 ---------------
-AI PROVIDER ORDER
-------------------
-- Primary AI: Groq (AI_PROVIDER=groq; GROQ_API_KEY; GROQ_MODEL defaults to
-  openai/gpt-oss-120b). Keep Groq as the primary provider.
-- Secondary AI: Gemini (GEMINI_API_KEY; GEMINI_MODEL optional). Gemini is only
-  called if Groq fails. Keep the existing Gemini key private.
-- Web search: Tavily (TAVILY_API_KEY). This is a search service, NOT an AI
-  provider. It supplies ranked snippets and source URLs to Groq/Gemini for
-  questions needing current information.
-
-TAVILY FREE TIER
------------------
-Tavily Researcher currently includes 1,000 search credits per month and does
-not require a credit card (verify current terms at https://www.tavily.com/pricing).
-The code uses basic search (1 credit per query), max 4 results, and a 4-second
-network timeout. If TAVILY_API_KEY is absent, search is skipped and the rest of
-the assistant continues normally. When credits are exhausted, Tavily requests
-may stop; the app does not automatically upgrade or invoke paid billing.
-
-RENDER ENVIRONMENT
-------------------
-Keep existing GROQ_API_KEY and GEMINI_API_KEY as-is. Add TAVILY_API_KEY only
-after you create a free Tavily account and copy its key into Render. Do not
-paste keys into chat, source code, README files, or GitHub. Keep the Render
-start command unchanged: gunicorn app:app --bind 0.0.0.0:$PORT
+The app reads GEMINI_API_KEY from the Render environment. You previously
+configured this variable; keep it private and do not send it in chat. The
+optional GEMINI_MODEL defaults to gemini-3.8-flash. No code change is needed
+for the key itself. If the key is missing, invalid, or over quota, the app
+falls back to a readable stored FAQ response when available rather than crashing.
 
 AFTER DEPLOYMENT: CHECK THESE URLS
 ---------------------------------
@@ -62,12 +42,10 @@ Then test the chat with:
 
 LIVE OFFICIAL INFORMATION
 -------------------------
-For GZU-specific questions, the app selects relevant pages from the official
-GZU website (www.gzu.ac.zw) and the official GZU e-learning domain
-(elearning.gzu.ac.zw), extracts page text, and adds a bounded Tavily search
-for current questions (e.g. latest notices or exam timetables). Groq answers
-first; Gemini is the backup. The model is instructed to ground its answer in
-retrieved evidence. The notices page is included to help surface current notices.
+For general university questions, the app selects relevant pages from the
+official GZU website (www.gzu.ac.zw) and the official GZU e-learning domain
+(elearning.gzu.ac.zw), extracts page text, and asks Gemini to answer only from
+those extracts. The notices page is included to help surface current notices.
 Retrieved page text is cached in memory for 15 minutes to reduce repeated
 requests. This is live website retrieval, not a guarantee that the GZU site is
 reachable or that every answer is present on the site. If Gemini is unavailable but official page text was retrieved, the app now
@@ -97,6 +75,5 @@ when the device has no connection.
 SECURITY
 --------
 Never commit API keys. The app only queries a fixed list of official GZU URLs
-and rejects redirects outside the official GZU domains. GROQ_API_KEY is sent only to Groq, GEMINI_API_KEY only to Google when backup
-is needed, and TAVILY_API_KEY only to Tavily for web search. Search results are
-untrusted external content and are provided as evidence, not instructions.
+and rejects redirects outside the official GZU domains. The key is sent only
+to Google's Gemini API when an answer is requested.
