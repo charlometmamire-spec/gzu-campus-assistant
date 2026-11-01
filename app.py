@@ -1153,7 +1153,7 @@ def answer_from_official_context(question, context):
         return ""
 
 def answer_with_general_gemini(question):
-    """Answer non-GZU questions with Gemini's general knowledge, safely."""
+    """Answer non-GZU questions using the configured AI provider, safely."""
     if not _ai_provider_ready():
         return ""
     prompt = (
@@ -1266,29 +1266,44 @@ def find_answer(message):
     if curated:
         return curated
 
-    # Prefer current official GZU website excerpts for general questions.
-    # Campus-location routing above is intentionally untouched.
+    # Route non-location questions through the configured AI provider.
+    # For GZU-specific questions, first retrieve official context and let the
+    # provider formulate a complete grounded answer. General conversation is
+    # sent directly to the provider (not to the website scraper).
     live_context = retrieve_official_gzu_context(message)
-    live_answer = answer_from_official_context(message, live_context)
-    if live_answer:
-        return {"response": live_answer, "location": None, "source": "official_gzu_website"}
+    if live_context:
+        live_answer = answer_from_official_context(message, live_context)
+        if live_answer:
+            return {"response": live_answer, "location": None, "source": "official_gzu_website_ai"}
 
-    # If the official pages were retrieved but Gemini is missing, over quota,
-    # or temporarily unavailable, show the relevant source extracts directly.
-    # This avoids discarding live evidence and falling straight to an old FAQ.
-    extracted_answer = answer_from_official_context_fallback(message, live_context)
-    if extracted_answer:
-        return {
-            "response": extracted_answer,
-            "location": None,
-            "source": "official_gzu_website_extracts",
-        }
-
-    # General questions are answered by Gemini's general knowledge. This is
-    # deliberately after GZU live-context retrieval so campus facts stay grounded.
     general_answer = answer_with_general_gemini(message)
     if general_answer:
-        return {"response": general_answer, "location": None, "source": "gemini_general"}
+        return {"response": general_answer, "location": None, "source": AI_PROVIDER + "_general"}
+
+    # Safe, concise fallback: never expose raw scraped HTML/page fragments.
+    # Provide a clean summary for the known fees-payment topic.
+    q = normalize(message)
+    if any(term in q for term in ("fee", "fees", "tuition", "pay university", "payment")):
+        return {
+            "response": (
+                "GZU's published fees guidance says 60% of fees is due before "
+                "registration and the remaining 40% before end-of-semester exams. "
+                "For each payment, 50% of the required amount must be paid in "
+                "USD; the other 50% may be paid in USD or ZWG. The exact current "
+                "Computer Science fee amount was not verified in the retrieved "
+                "official information. Please confirm the amount with GZU Accounts "
+                "before paying. Official source: https://www.gzu.ac.zw/fees-structure/"
+            ),
+            "location": None,
+            "source": "verified_fees_fallback",
+        }
+
+    # Last resort: use a stored FAQ answer, but do not send scraped page text.
+    answer = find_faq_answer(message)
+    return {"response": answer or (
+        "I'm temporarily unable to reach my AI service. Please try again shortly, "
+        "or check the official GZU website: https://www.gzu.ac.zw/"
+    ), "location": None, "source": "safe_fallback"}
 
     # Fall back to the stored FAQ only when live official evidence is unavailable.
     answer = find_faq_answer(message)
