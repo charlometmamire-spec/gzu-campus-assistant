@@ -1,4 +1,3 @@
-# Resilience settings for external AI calls. Render start command stays unchanged.
-timeout = 90
-graceful_timeout = 25
-keepalive = 5
+# Keep the existing Render start command unchanged.
+timeout = 75
+graceful_timeout = 20

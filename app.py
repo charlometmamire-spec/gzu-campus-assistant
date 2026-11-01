@@ -1002,7 +1002,10 @@ _OFFICIAL_MAX_BYTES = 1_200_000
 
 def _official_pages_for_question(question):
     q = normalize(question)
-    selected = ["notices"]
+    # Do not send ordinary academic/general questions to the GZU website.
+    # Only choose official pages when the wording indicates a GZU service,
+    # policy, campus matter, or university-specific information request.
+    selected = []
     rules = [
         ("fees", ("fee", "fees", "tuition", "payment", "pay", "deposit", "balance", "levy", "invoice")),
         ("admissions", ("admission", "apply", "application", "applicant", "entry requirements", "enrol", "enroll", "intake")),
@@ -1018,8 +1021,11 @@ def _official_pages_for_question(question):
             selected.append(page)
     if "admissions" in selected:
         selected.extend(["programmes", "documents"])
-    if len(selected) == 1:
-        selected.extend(["home", "documents"])
+    if not selected:
+        return []
+    # Notices are useful alongside explicitly GZU-specific current requests.
+    if any(term in q for term in ("gzu", "great zimbabwe", "university", "campus")):
+        selected.insert(0, "notices")
     # Preserve order and cap outbound requests to three official pages.
     return list(dict.fromkeys(selected))[:3]
 
@@ -1310,7 +1316,14 @@ def find_answer(message):
     # For GZU-specific questions, first retrieve official context and let the
     # provider formulate a complete grounded answer. General conversation is
     # sent directly to the provider (not to the website scraper).
-    live_context = retrieve_official_gzu_context(message)
+    q_normalized = normalize(message)
+    gzu_terms = ("gzu", "great zimbabwe", "university", "campus", "student portal", "studentportal")
+    official_topic_terms = ("exam", "examination", "timetable", "fees", "fee", "tuition", "admission", "registration", "programme", "degree", "lecturer", "dean", "vice chancellor", "notice", "deadline", "semester", "module", "library")
+    is_official_gzu_query = (
+        any(term in q_normalized for term in gzu_terms)
+        or any(term in q_normalized for term in official_topic_terms)
+    )
+    live_context = retrieve_official_gzu_context(message) if is_official_gzu_query else ""
     if live_context:
         live_answer = answer_from_official_context(message, live_context)
         if live_answer:
@@ -1402,20 +1415,21 @@ def chat():
 
     try:
         result = find_answer(message)
-        log_chat(message, result["response"])
-        return jsonify(result)
     except Exception as exc:
-        # Keep the chat endpoint alive if both AI providers or a source fail.
-        app.logger.exception("Chat request failed safely (%s)", type(exc).__name__)
-        return jsonify({
+        app.logger.exception("Chat request failed (%s)", type(exc).__name__)
+        result = {
             "response": (
-                "I'm temporarily unable to reach the AI service. Please try again "
-                "in a little while. Campus directions and directory information "
-                "remain available."
+                "I'm temporarily unable to complete that request. Please try again "
+                "shortly. For official university updates, visit https://www.gzu.ac.zw/"
             ),
             "location": None,
             "source": "temporary_service_fallback",
-        }), 200
+        }
+    try:
+        log_chat(message, result["response"])
+    except Exception as exc:
+        app.logger.warning("Chat logging unavailable (%s)", type(exc).__name__)
+    return jsonify(result)
 
 
 if __name__ == "__main__":
