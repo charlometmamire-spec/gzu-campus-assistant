@@ -774,6 +774,8 @@ def _groq_post(payload, timeout=15):
         return None
     parts = payload.get("contents", [{}])[0].get("parts", [])
     prompt = "\n".join(str(part.get("text", "")) for part in parts if part.get("text"))
+    # Keep outbound prompt text ASCII-safe for Latin-1 constrained environments.
+    prompt = prompt.encode("ascii", "backslashreplace").decode("ascii")
     generation = payload.get("generationConfig", {})
     body = {
         "model": GROQ_MODEL,
@@ -1096,7 +1098,7 @@ def answer_from_official_context_fallback(question, context):
         "I found these relevant details on the official GZU website. "
         "I am showing the page information directly because the AI answer "
         "service is unavailable right now:\n\n"
-        + "\n".join(f"• {sentence}" for sentence in selected)
+        + "\n".join(f"- {sentence}" for sentence in selected)
     )
 
     # Explicitly surface the known high-risk case where official fee pages
@@ -1149,7 +1151,7 @@ def answer_from_official_context(question, context):
         ).strip()
         return answer
     except Exception as exc:
-        app.logger.warning("Official-site %s answer unavailable: %s", AI_PROVIDER, exc)
+        app.logger.warning("Official-site %s answer unavailable (%s)", AI_PROVIDER, type(exc).__name__)
         return ""
 
 def answer_with_general_gemini(question):
@@ -1176,7 +1178,7 @@ def answer_with_general_gemini(question):
         answer = "\n".join(str(part.get("text", "")).strip() for part in parts if part.get("text")).strip()
         return answer
     except Exception as exc:
-        app.logger.warning("General %s response unavailable: %s", AI_PROVIDER, exc)
+        app.logger.warning("General %s response unavailable (%s)", AI_PROVIDER, type(exc).__name__)
         return ""
 
 # ---------------------------------------------------------
