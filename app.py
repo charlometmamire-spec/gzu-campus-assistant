@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 import re
 import sqlite3
+import time
 import os
 import urllib.request
 from difflib import SequenceMatcher
@@ -757,28 +758,45 @@ def _gemini_model_candidates():
     return list(dict.fromkeys(model for model in ordered if model))
 
 def _gemini_post(payload, timeout=15):
+    """Call Gemini with bounded retry and safe model fallback behavior."""
     if not GEMINI_API_KEY:
         return None
     last_error = None
     for model in _gemini_model_candidates():
         endpoint = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            + quote_plus(model) + ":generateContent?key=" + quote_plus(GEMINI_API_KEY)
+            + quote_plus(model) + ":generateContent"
         )
         req = urllib.request.Request(
             endpoint, data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}, method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": GEMINI_API_KEY,
+            }, method="POST",
         )
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            last_error = exc
-            # A 404 for 2.5 commonly means the project is not eligible; try current models.
-            if exc.code == 404:
-                app.logger.warning("Gemini model %s returned 404; trying fallback model", model)
-                continue
-            raise
+        # Retry transient overload/rate-limit failures once. Do not retry 400/401
+        # errors, and keep the retry bounded so Render requests do not hang.
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                last_error = exc
+                if exc.code == 404:
+                    app.logger.warning("Gemini model %s returned 404; trying fallback model", model)
+                    break
+                if exc.code in (429, 500, 502, 503, 504) and attempt == 0:
+                    app.logger.warning("Gemini returned HTTP %s; retrying once", exc.code)
+                    time.sleep(0.6)
+                    continue
+                raise
+            except (TimeoutError, urllib.error.URLError) as exc:
+                last_error = exc
+                if attempt == 0:
+                    app.logger.warning("Gemini connection timed out/failed; retrying once")
+                    time.sleep(0.6)
+                    continue
+                raise
     if last_error:
         raise last_error
     return None
