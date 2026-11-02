@@ -815,7 +815,11 @@ def _tavily_media_search(question, mode="images"):
     if mode == "images":
         body["include_images"] = True
     else:
-        body["query"] += " official university PDF document timetable handbook notice"
+        # Timetables are high-stakes/time-sensitive: prefer only GZU's official domain.
+        is_timetable = any(term in normalize(query) for term in ("exam timetable", "examination timetable", "exam time table", "timetable"))
+        body["query"] += " official Great Zimbabwe University PDF document timetable handbook notice"
+        if is_timetable:
+            body["include_domains"] = ["gzu.ac.zw"]
     req = urllib.request.Request(
         "https://api.tavily.com/search",
         data=json.dumps(body).encode("utf-8"),
@@ -837,7 +841,11 @@ def _tavily_media_search(question, mode="images"):
             for item in raw.get("results", []):
                 url = str(item.get("url", ""))
                 title = str(item.get("title", "Official document"))[:180]
-                if url.startswith("https://") and (url.lower().endswith(".pdf") or "pdf" in str(item.get("content", "")).lower() or any(x in url.lower() for x in ("document", "download", "uploads"))):
+                is_timetable = any(term in normalize(query) for term in ("exam timetable", "examination timetable", "exam time table", "timetable"))
+                official = url.lower().split("/", 3)[2].endswith("gzu.ac.zw") if url.startswith("https://") else False
+                looks_pdf = url.lower().split("?", 1)[0].endswith(".pdf") or "pdf" in str(item.get("content", "")).lower()
+                acceptable = looks_pdf and (official if is_timetable else True)
+                if url.startswith("https://") and acceptable:
                     if url not in seen:
                         seen.add(url)
                         found["documents"].append({"url": url, "title": title})
@@ -1439,6 +1447,11 @@ def _clean_model_markdown(text):
     # Remove stray escaping around normal Markdown link delimiters.
     text = re.sub(r"\\\((https?://)", r"(\1", text)
     text = re.sub(r"\\\)", ")", text)
+    # AI sometimes escapes punctuation that should remain ordinary Markdown.
+    text = re.sub(r"\\([\[\]_*`])", r"\1", text)
+    text = text.replace(r"\\&", "&")
+    # De-duplicate malformed nested URL wrappers while preserving actual URLs.
+    text = re.sub(r"\[\[?(https?://[^]\s]+)\]?\]?(?:\(\[?\1\]?\)?)", r"\1", text)
     return text.strip()
 
 
@@ -1534,7 +1547,7 @@ def find_answer(message):
     if is_direction_request(message):
         names = [item["name"] for item in directory_choices()]
         if names:
-            choices_text = ", ".join(names)
+            choices_text = "\n- ".join(names)
         else:
             choices_text = "the campus directory is currently unavailable"
 
@@ -1555,6 +1568,8 @@ def find_answer(message):
         media = _tavily_media_search(message, media_mode)
         if media_mode == "images" and media.get("images"):
             return {"response": "Here are relevant images I found online. Open an image to view it. Check its source before reuse.", "location": None, "images": media["images"], "source": "tavily_images"}
+        if media_mode == "documents" and not media.get("documents") and any(term in normalize(message) for term in ("exam timetable", "examination timetable", "exam time table", "timetable")):
+            return {"response": "I couldn't verify a current direct exam-timetable PDF on GZU's official domain. Please check the university's official pages for the latest notice:\n\nExaminations: https://www.gzu.ac.zw/examinations/\n\nExam timetable: https://www.gzu.ac.zw/exam-timetable\n\nNotices: https://www.gzu.ac.zw/category/notices/\n\nI won't label an older third-party timetable as the latest.", "location": None, "source": "official_gzu_timetable_fallback"}
         if media_mode == "documents" and media.get("documents"):
             links = "\n".join(f"- [{item['title']}]({item['url']})" for item in media["documents"])
             return {"response": "I found these possible documents. Please verify the date and issuing office before relying on a timetable or policy:\n\n" + links, "location": None, "source": "tavily_documents"}
