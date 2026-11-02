@@ -1,0 +1,16 @@
+GZU CAMPUS ASSISTANT — CONSOLIDATED UPDATE
+
+Changes in this package:
+1. Markdown cleanup now targets malformed model-generated Markdown links and escaped punctuation without globally deleting backslashes (which could corrupt URLs/code).
+2. Tavily document retrieval now checks the requested document type (handbook, timetable, fees) against title/snippet before returning a PDF, reducing unrelated-document substitutions.
+3. Registration starter answer is GZU-specific: distinguishes new and returning students, points to the student portal and official notices/manual, and cites the 2026 official Bursar notice's 75% registration requirement with a reminder to verify account balance.
+
+Preserved:
+- Compass Locations matching/directory/routing logic unchanged.
+- Existing Groq/Gemini/Tavily configuration and Render start command unchanged.
+- No new paid API or service.
+
+Validation:
+- app.py passed Python syntax compilation (python -m py_compile app.py).
+- ZIP integrity check performed after packaging.
+- Full Flask runtime tests could not be run in this environment because Flask is not installed here. Please verify on Render after deployment.
