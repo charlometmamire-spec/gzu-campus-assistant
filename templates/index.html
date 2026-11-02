@@ -525,12 +525,19 @@
   }
 
   function renderInlineMarkdown(container, text) {
-    const pattern = /(https?:\/\/[^\s<>()"']+|\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+    const pattern = /(\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<>()"']+|\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
     let cursor = 0, match;
     while ((match = pattern.exec(text)) !== null) {
       if (match.index > cursor) container.appendChild(document.createTextNode(text.slice(cursor, match.index)));
       const token = match[0];
-      if (/^https?:\/\//i.test(token)) {
+      if (token.startsWith("[") && token.includes("](")) {
+        const split = token.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
+        if (split) {
+          try { const parsed = new URL(split[2]); if (!/^https?:$/.test(parsed.protocol)) throw new Error("Unsafe URL");
+            const a = document.createElement("a"); a.href = parsed.href; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = split[1]; container.appendChild(a);
+          } catch (_) { container.appendChild(document.createTextNode(token)); }
+        } else container.appendChild(document.createTextNode(token));
+      } else if (/^https?:\/\//i.test(token)) {
         let url = token, trailing = "";
         while (/[.,!?;:]$/.test(url)) { trailing = url.slice(-1) + trailing; url = url.slice(0, -1); }
         try {
