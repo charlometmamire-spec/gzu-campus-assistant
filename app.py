@@ -812,7 +812,7 @@ def _append_source_links(answer, sources):
         if url not in seen:
             seen.add(url)
             lines.append(f"- {title}: {url}")
-    return answer.rstrip() + "\n\nSources (Tavily):\n" + "\n".join(lines)
+    return _clean_model_markdown(answer.rstrip()) + "\n\nSources (Tavily):\n" + "\n".join(lines)
 
 
 def _groq_post(payload, timeout=15, use_browser_search=False):
@@ -1285,8 +1285,11 @@ def answer_with_tavily_context(question, context, sources):
     prompt = (
         "You are the GZU Campus Assistant. Answer the user's question using the "
         "following search excerpts. Prioritize official gzu.ac.zw pages for university "
-        "facts. Do not invent missing details. If results are inconclusive, say so. "
-        "Keep dates and policies qualified and encourage checking the linked source.\n\n"
+        "facts. For timetable questions, identify and link the actual official PDF or "
+        "document if it appears in results; do not merely describe the exam period. "
+        "Never invent exam dates, venues, or times. If only a general exams page is "
+        "found and no timetable document is present, say that clearly. Keep dates "
+        "and policies qualified.\n\n"
         "Question: " + str(question) + "\n\nSearch results:\n" + str(context)
     )
     payload = {"contents": [{"parts": [{"text": prompt}]}],
@@ -1308,8 +1311,12 @@ def answer_with_general_gemini(question):
         return ""
     prompt = (
         "You are a friendly, helpful general-purpose AI assistant embedded "
-        "in the GZU Campus Assistant. Answer the user's question accurately "
-        "and in plain language. For uncertain or time-sensitive facts, say "
+        "in the GZU Campus Assistant. Answer general academic and everyday "
+        "questions from your knowledge, even when GZU's website has no definition. "
+        "Expand common student abbreviations (for example, chem = chemistry) "
+        "when the intent is clear. Only use GZU-specific evidence for questions "
+        "about GZU programmes, people, policies, notices, fees, or schedules. "
+        "Answer accurately and in plain language. For uncertain or time-sensitive facts, say "
         "so and avoid pretending to have live information. For medical, "
         "legal, financial, or safety-critical matters, give cautious general "
         "information and recommend a qualified professional when appropriate.\n\n"
@@ -1334,6 +1341,43 @@ def answer_with_general_gemini(question):
     except Exception as exc:
         app.logger.warning("General %s response unavailable (%s)", AI_PROVIDER, type(exc).__name__)
         return ""
+
+# ---------------------------------------------------------
+# QUESTION INTENT ROUTING
+# ---------------------------------------------------------
+
+def _is_gzu_specific_question(message):
+    """Only consult campus sources when the question is actually about GZU."""
+    q = normalize(message)
+    explicit = (
+        "gzu", "great zimbabwe university", "at the university", "on campus",
+        "our campus", "my university", "university of", "faculty of",
+        "school of", "department of", "programme offered", "degree offered",
+        "lecturer at", "staff at", "who is the dean", "dean of", "vice chancellor",
+        "gzu fees", "gzu timetable", "gzu exam", "gzu notice", "gzu news",
+        "registration at", "admission to gzu", "apply to gzu",
+    )
+    dynamic_gzu = (
+        "exam timetable", "examination timetable", "exam time table", "exam timetable",
+        "semester timetable", "class timetable", "registration deadline",
+        "latest notice", "latest news", "current dean", "department chair",
+        "chairperson", "lecturer", "staff directory", "current fees",
+        "fees for", "contact for", "school of",
+    )
+    # Timetable/staff/fee terms imply the institution in this campus-assistant app.
+    return any(x in q for x in explicit) or any(x in q for x in dynamic_gzu)
+
+
+def _clean_model_markdown(text):
+    """Repair common over-escaped Markdown artifacts without altering URLs."""
+    if not isinstance(text, str):
+        return text
+    text = re.sub(r"\\([*_`])", r"\1", text)
+    text = re.sub(r"\\?\*\*([^*]+)\\?\*\*", r"**\1**", text)
+    # Normalize malformed escaped protocol labels; preserve actual links.
+    text = text.replace(r"https\://", "https://").replace(r"https\\://", "https://")
+    return text.strip()
+
 
 # ---------------------------------------------------------
 # ANSWER ROUTING
@@ -1430,31 +1474,46 @@ def find_answer(message):
     # For GZU-specific questions, first retrieve official context and let the
     # provider formulate a complete grounded answer. General conversation is
     # sent directly to the provider (not to the website scraper).
-    live_context = retrieve_official_gzu_context(message)
-    if live_context:
-        live_answer = answer_from_official_context(message, live_context)
-        if live_answer:
-            return {"response": live_answer, "location": None, "source": "official_gzu_website_ai"}
-
-    # Dynamic/current GZU questions may refer to pages or PDFs not indexed by
-    # the small fixed official-page list. Tavily is the fallback retrieval path.
+    # General academic questions ("what is machine learning?", "chem") must
+    # not be constrained by GZU's website. Campus retrieval is opt-in by intent.
+    is_campus_question = _is_gzu_specific_question(message)
     qnorm = normalize(message)
-    campus_current_markers = (
-        "timetable", "latest notice", "latest news", "current dean", "dean of",
-        "department chair", "chairperson", "lecturer", "staff", "registration deadline",
-        "exam timetable", "examination timetable", "fees for", "current fees",
-        "who is the", "contact for", "gzu announcement", "school of"
-    )
-    if any(marker in qnorm for marker in campus_current_markers):
+    is_timetable_question = any(term in qnorm for term in (
+        "timetable", "time table", "exam schedule", "examination schedule",
+        "exam dates", "when are exams"))
+
+    # Dynamic timetables/notices can be PDFs absent from our fixed page list.
+    # Search Tavily first so the model can return the actual official document.
+    if is_campus_question and is_timetable_question:
         web_context, web_sources = _tavily_search_context(message, official_first=True)
         if web_context:
             grounded = answer_with_tavily_context(message, web_context, web_sources)
             if grounded:
-                return {"response": grounded, "location": None, "source": "tavily_gzu_search"}
+                return {"response": _clean_model_markdown(grounded), "location": None, "source": "tavily_gzu_search"}
+
+    if is_campus_question:
+        live_context = retrieve_official_gzu_context(message)
+        if live_context:
+            live_answer = answer_from_official_context(message, live_context)
+            if live_answer:
+                return {"response": _clean_model_markdown(live_answer), "location": None, "source": "official_gzu_website_ai"}
+
+        campus_current_markers = (
+            "latest notice", "latest news", "current dean", "dean of",
+            "department chair", "chairperson", "lecturer", "staff", "registration deadline",
+            "exam timetable", "examination timetable", "fees for", "current fees",
+            "who is the", "contact for", "gzu announcement", "school of"
+        )
+        if any(marker in qnorm for marker in campus_current_markers):
+            web_context, web_sources = _tavily_search_context(message, official_first=True)
+            if web_context:
+                grounded = answer_with_tavily_context(message, web_context, web_sources)
+                if grounded:
+                    return {"response": _clean_model_markdown(grounded), "location": None, "source": "tavily_gzu_search"}
 
     general_answer = answer_with_general_gemini(message)
     if general_answer:
-        return {"response": general_answer, "location": None, "source": AI_PROVIDER + "_general"}
+        return {"response": _clean_model_markdown(general_answer), "location": None, "source": AI_PROVIDER + "_general"}
 
     # Safe, concise fallback: never expose raw scraped HTML/page fragments.
     # Provide a clean summary for the known fees-payment topic.
