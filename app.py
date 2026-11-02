@@ -860,7 +860,7 @@ def _tavily_media_search(question, mode="images"):
 def _media_intent(question):
     q = normalize(question)
     image_intent = any(x in q for x in ("show me a picture", "show pictures", "show image", "show images",
-        "search images", "find images", "find a picture", "find pictures", "picture of", "photos of", "photo of"))
+        "search images", "find images", "find a picture", "find pictures", "picture of", "pictures of", "show me pictures of", "photos of", "photo of", "images of"))
     document_intent = any(x in q for x in ("find pdf", "find the pdf", "search pdf", "download pdf",
         "get the document", "find document", "show document", "exam timetable pdf", "timetable document",
         "download timetable", "find timetable", "get timetable", "retrieve timetable"))
@@ -1436,22 +1436,18 @@ def _is_gzu_specific_question(message):
 
 
 def _clean_model_markdown(text):
-    """Repair common escaped Markdown and malformed duplicated links."""
+    """Normalize AI's over-escaped Markdown while preserving URLs and code."""
     if not isinstance(text, str):
         return text
-    text = re.sub(r"\\([*_`])", r"\1", text)
-    text = re.sub(r"\\?\*\*([^*]+)\\?\*\*", r"**\1**", text)
-    text = text.replace(r"https\://", "https://").replace(r"https\\://", "https://")
-    # Repair malformed model output like [label]\([https://x](https://x)).
-    text = re.sub(r"\\?\(\[([^]]+)\]\(?(https?://[^)\]\s]+)\)?\)?\(?(https?://[^)\]\s]+)\)?", r"[\1](\2)", text)
-    # Remove stray escaping around normal Markdown link delimiters.
-    text = re.sub(r"\\\((https?://)", r"(\1", text)
-    text = re.sub(r"\\\)", ")", text)
-    # AI sometimes escapes punctuation that should remain ordinary Markdown.
-    text = re.sub(r"\\([\[\]_*`])", r"\1", text)
-    text = text.replace(r"\\&", "&")
-    # De-duplicate malformed nested URL wrappers while preserving actual URLs.
-    text = re.sub(r"\[\[?(https?://[^]\s]+)\]?\]?(?:\(\[?\1\]?\)?)", r"\1", text)
+    # The model sometimes emits literal backslashes before Markdown syntax.
+    text = re.sub(r"\\([*_`~\[\]()>])", r"\1", text)
+    # Remove escaped whitespace artifacts from generated markdown lists.
+    text = re.sub(r"(?m)^\\\*\s+", "- ", text)
+    # Repair the frequent malformed link: [label]\([url](url))
+    text = re.sub(r"\[([^\]]+)\]\\?\(\[?(https?://[^\s\]\)]+)\]?\)?(?:\(\[?(https?://[^\s\]\)]+)\]?\)?)", r"[\1](\2)", text)
+    # Normalize duplicate wrappers around bare URLs without escaping them.
+    text = re.sub(r"\\?\[(https?://[^\]\s]+)\\?\]", r"\1", text)
+    text = text.replace(r"\&", "&")
     return text.strip()
 
 
