@@ -137,6 +137,10 @@
       padding: 6px 9px; color: var(--muted); font-size: 12px;
     }
 
+    .media-gallery { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:12px; }
+    .media-gallery a { display:block; border:1px solid var(--border); border-radius:12px; overflow:hidden; color:var(--green-dark); text-decoration:none; background:var(--surface); }
+    .media-gallery img { display:block; width:100%; aspect-ratio:4/3; object-fit:cover; }
+    .media-gallery span { display:block; padding:8px; font-size:12px; }
     .location-card {
       margin-top: 12px; width: 100%; max-width: 620px; overflow: hidden;
       border: 1px solid var(--border); border-radius: 14px; background: white;
@@ -560,7 +564,26 @@
     content.appendChild(list);
   }
 
-  function addMessage(text, kind, locationData = null, choices = null) {
+  function addMediaGallery(content, images) {
+    if (!Array.isArray(images) || !images.length) return;
+    const gallery = document.createElement("div");
+    gallery.className = "media-gallery";
+    images.slice(0, 8).forEach(item => {
+      if (!item || typeof item.url !== "string" || !item.url.startsWith("https://")) return;
+      const link = document.createElement("a");
+      link.href = item.url; link.target = "_blank"; link.rel = "noopener noreferrer";
+      const image = document.createElement("img");
+      image.src = item.url; image.alt = item.description || "Search result image";
+      image.loading = "lazy"; image.referrerPolicy = "no-referrer";
+      image.onerror = () => link.remove();
+      const caption = document.createElement("span");
+      caption.textContent = item.description || "Open image";
+      link.append(image, caption); gallery.appendChild(link);
+    });
+    if (gallery.children.length) content.appendChild(gallery);
+  }
+
+  function addMessage(text, kind, locationData = null, choices = null, images = null) {
     const row = document.createElement("div");
     row.className = "message " + kind;
 
@@ -583,6 +606,7 @@
     if (kind === "bot") {
       addChoiceButtons(content, choices);
       addLocationCard(content, locationData);
+      addMediaGallery(content, images);
 
       const actions = document.createElement("div");
       actions.className = "message-actions";
@@ -659,7 +683,7 @@
       typing.remove();
 
       const answer = data.response || "No answer was returned.";
-      addMessage(answer, "bot", data.location || null, data.choices || null);
+      addMessage(answer, "bot", data.location || null, data.choices || null, data.images || null);
       status.textContent = "Ready";
 
       if (readAloud) speak(answer);

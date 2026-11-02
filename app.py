@@ -804,6 +804,60 @@ def _tavily_search_context(question, official_first=False):
         return "", []
 
 
+
+def _tavily_media_search(question, mode="images"):
+    """Retrieve image URLs or document links only when explicitly requested."""
+    if not TAVILY_API_KEY:
+        return {"images": [], "documents": []}
+    query = str(question).strip()
+    body = {"query": query, "search_depth": "basic", "max_results": 5,
+            "include_answer": False, "include_raw_content": False}
+    if mode == "images":
+        body["include_images"] = True
+    else:
+        body["query"] += " official university PDF document timetable handbook notice"
+    req = urllib.request.Request(
+        "https://api.tavily.com/search",
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": "Bearer " + TAVILY_API_KEY},
+        method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=6) as response:
+            raw = json.loads(response.read().decode("utf-8"))
+        found = {"images": [], "documents": []}
+        if mode == "images":
+            seen = set()
+            for item in raw.get("images", [])[:8]:
+                url = item.get("url") if isinstance(item, dict) else item
+                if isinstance(url, str) and url.startswith("https://") and url not in seen:
+                    seen.add(url)
+                    found["images"].append({"url": url, "description": str(item.get("description", "Relevant image"))[:180] if isinstance(item, dict) else "Relevant image"})
+        else:
+            seen = set()
+            for item in raw.get("results", []):
+                url = str(item.get("url", ""))
+                title = str(item.get("title", "Official document"))[:180]
+                if url.startswith("https://") and (url.lower().endswith(".pdf") or "pdf" in str(item.get("content", "")).lower() or any(x in url.lower() for x in ("document", "download", "uploads"))):
+                    if url not in seen:
+                        seen.add(url)
+                        found["documents"].append({"url": url, "title": title})
+                if len(found["documents"]) >= 5:
+                    break
+        return found
+    except Exception as exc:
+        app.logger.warning("Tavily media search unavailable (%s)", type(exc).__name__)
+        return {"images": [], "documents": []}
+
+
+def _media_intent(question):
+    q = normalize(question)
+    image_intent = any(x in q for x in ("show me a picture", "show pictures", "show image", "show images",
+        "search images", "find images", "find a picture", "find pictures", "picture of", "photos of", "photo of"))
+    document_intent = any(x in q for x in ("find pdf", "find the pdf", "search pdf", "download pdf",
+        "get the document", "find document", "show document", "exam timetable pdf", "timetable document",
+        "download timetable", "find timetable", "get timetable", "retrieve timetable"))
+    return "images" if image_intent else ("documents" if document_intent else "")
+
 def _append_source_links(answer, sources):
     if not answer or not sources:
         return answer
@@ -1429,6 +1483,30 @@ def find_answer(message):
     if _is_greeting(message):
         return _greeting_response(message)
 
+    qquick = normalize(message)
+    if any(term in qquick for term in ("how can i contact gzu", "contact gzu", "gzu contact details", "gzu phone number", "gzu email address")):
+        return {"response": (
+            "You can contact Great Zimbabwe University through its general contacts:\n\n"
+            "- Telephone: +263 39 2266648 / 58 / 60 / 63\n"
+            "- Mobile: +263 782 780 662\n"
+            "- Email: information@gzu.ac.zw\n"
+            "- Contact page: https://www.gzu.ac.zw/contact-us-2/\n\n"
+            "For a specific issue (fees, admissions, examinations, or a department), "
+            "tell me which office you need so I can direct you more precisely."
+        ), "location": None, "source": "official_gzu_contact"}
+    if qquick in {"how do i register", "how to register", "registration at gzu", "gzu registration"}:
+        return {"response": (
+            "GZU registration generally involves using the relevant university portal, "
+            "following the current registration notice, completing required details, "
+            "and meeting the published payment and document requirements.\n\n"
+            "Useful official links:\n"
+            "- Student portal: https://studentportal.gzu.ac.zw/\n"
+            "- Official notices: https://www.gzu.ac.zw/category/notices/\n"
+            "- Contact GZU: https://www.gzu.ac.zw/contact-us-2/\n\n"
+            "Are you registering as a **new student** or doing **semester/course registration**? "
+            "The steps differ, and I can guide you accordingly."
+        ), "location": None, "source": "registration_router"}
+
     # Give a safe, official-source-based admissions starter answer immediately.
     admissions_answer = _admissions_basics(message)
     if admissions_answer:
@@ -1470,6 +1548,16 @@ def find_answer(message):
             "location": None,
             "choices": names,
         }
+
+    # Explicit media requests: search and return media metadata to the chat UI.
+    media_mode = _media_intent(message)
+    if media_mode:
+        media = _tavily_media_search(message, media_mode)
+        if media_mode == "images" and media.get("images"):
+            return {"response": "Here are relevant images I found online. Open an image to view it. Check its source before reuse.", "location": None, "images": media["images"], "source": "tavily_images"}
+        if media_mode == "documents" and media.get("documents"):
+            links = "\n".join(f"- [{item['title']}]({item['url']})" for item in media["documents"])
+            return {"response": "I found these possible documents. Please verify the date and issuing office before relying on a timetable or policy:\n\n" + links, "location": None, "source": "tavily_documents"}
 
     medical_dean_answer = _official_medical_dean_answer(message)
     if medical_dean_answer:

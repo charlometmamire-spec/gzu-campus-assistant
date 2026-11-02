@@ -1,0 +1,20 @@
+GZU CAMPUS ASSISTANT - FINAL TARGETED UPDATE
+
+Changes:
+- Added explicit Tavily image search intent handling and safe HTTPS image gallery rendering in chat.
+- Added explicit document/PDF search intent handling and clickable result links. Search results are candidates; verify current official timetable/policy before relying on it.
+- Added direct official general-contact response and a registration overview with one clarification prompt.
+- Preserved campus_directory.json and the existing campus location matching / Google Maps logic.
+- Preserved Groq/Gemini/Tavily configuration and Render start command (not edited).
+- Existing Markdown sanitizer retained; no change to its implementation in this package.
+
+Validation:
+- app.py passed python -m py_compile.
+- Original source ZIP passed zipfile.testzip() before modification.
+- Flask runtime import/endpoint tests could not be run in this environment because Flask is not installed.
+- Live Tavily image/document results and Render deployment were NOT tested from this environment.
+
+Deployment reminder:
+- Keep Render start command: gunicorn app:app --bind 0.0.0.0:$PORT
+- Keep existing AI_PROVIDER, GROQ_API_KEY, GEMINI_API_KEY, and TAVILY_API_KEY environment variables.
+- Deploy manually and test in the live app before submission.
