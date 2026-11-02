@@ -1288,8 +1288,10 @@ def answer_with_tavily_context(question, context, sources):
         "facts. For timetable questions, identify and link the actual official PDF or "
         "document if it appears in results; do not merely describe the exam period. "
         "Never invent exam dates, venues, or times. If only a general exams page is "
-        "found and no timetable document is present, say that clearly. Keep dates "
-        "and policies qualified.\n\n"
+        "found and no timetable document is present, say that clearly. For staff questions, "
+        "distinguish a Faculty Dean from a Department Chair/HOD; do not call a chair "
+        "the dean. If the user's wording is ambiguous, explain the distinction and "
+        "state only names supported by the official results. Keep dates and policies qualified.\n\n"
         "Question: " + str(question) + "\n\nSearch results:\n" + str(context)
     )
     payload = {"contents": [{"parts": [{"text": prompt}]}],
@@ -1316,6 +1318,9 @@ def answer_with_general_gemini(question):
         "Expand common student abbreviations (for example, chem = chemistry) "
         "when the intent is clear. Only use GZU-specific evidence for questions "
         "about GZU programmes, people, policies, notices, fees, or schedules. "
+        "For questions such as 'Dean of Computer Science', carefully determine whether "
+        "the institution has a faculty Dean or a department Chair/HOD; do not invent "
+        "a separate dean for a department if sources identify only a faculty dean. "
         "Answer accurately and in plain language. For uncertain or time-sensitive facts, say "
         "so and avoid pretending to have live information. For medical, "
         "legal, financial, or safety-critical matters, give cautious general "
@@ -1369,13 +1374,17 @@ def _is_gzu_specific_question(message):
 
 
 def _clean_model_markdown(text):
-    """Repair common over-escaped Markdown artifacts without altering URLs."""
+    """Repair common escaped Markdown and malformed duplicated links."""
     if not isinstance(text, str):
         return text
     text = re.sub(r"\\([*_`])", r"\1", text)
     text = re.sub(r"\\?\*\*([^*]+)\\?\*\*", r"**\1**", text)
-    # Normalize malformed escaped protocol labels; preserve actual links.
     text = text.replace(r"https\://", "https://").replace(r"https\\://", "https://")
+    # Repair malformed model output like [label]\([https://x](https://x)).
+    text = re.sub(r"\\?\(\[([^]]+)\]\(?(https?://[^)\]\s]+)\)?\)?\(?(https?://[^)\]\s]+)\)?", r"[\1](\2)", text)
+    # Remove stray escaping around normal Markdown link delimiters.
+    text = re.sub(r"\\\((https?://)", r"(\1", text)
+    text = re.sub(r"\\\)", ")", text)
     return text.strip()
 
 
