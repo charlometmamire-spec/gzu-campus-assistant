@@ -847,8 +847,19 @@ def _official_gzu_timetable_documents():
             host = urllib.parse.urlparse(url).netloc.lower()
             path = urllib.parse.urlparse(url).path.lower()
             label_norm = normalize(label)
-            if host.endswith("gzu.ac.zw") and (path.endswith((".pdf", ".xlsx", ".xls", ".docx")) or "download" in label_norm or "/download/" in path):
-                candidates.append((label or "GZU examination timetable", url))
+            # The November 2026 timetable page contains a dedicated set of
+            # school-level XLSX files. Only accept those spreadsheets; never
+            # let unrelated site-wide PDFs (newsletter, handbook, calendar,
+            # annual report, etc.) enter the examination extraction pipeline.
+            filename = path.rsplit("/", 1)[-1]
+            november_2026_xlsx = (
+                path.endswith(".xlsx") and "/2026/11/" in path and any(token in filename for token in (
+                    "school-of", "julius-nyerere", "simon-mazorodze",
+                    "robert-mugabe", "gary-magadzire", "herbert-chitepo",
+                    "munhumutapa"))
+            )
+            if host.endswith("gzu.ac.zw") and november_2026_xlsx:
+                candidates.append((label or filename.replace("-", " "), url))
         # GZU's timetable page links to WordPress download landing pages by school.
         # Follow those official pages to discover the actual attachment URL.
         expanded = list(candidates)
@@ -1065,7 +1076,11 @@ def _media_intent(question):
         r"\b(?:pics?|pictures?|images?|photos?|photographs?)\b\s+(?:of|for|showing)\s+\w", q))
     media_subject_first = bool(re.search(
         r"\b(?:show|find|get|display|send|give|fetch|look up|search)\b.*\b(?:pics?|pictures?|images?|photos?)\b", q))
-    image_intent = (has_media_noun and asks_to_show) or subject_after_media or media_subject_first or any(x in q for x in (
+    # Also catch subject-first forms like "ENHYPEN images", "SKZ pics",
+    # "GZU photos" without requiring a verb or the word "of".
+    subject_then_media = bool(re.search(
+        r"\b[a-z0-9][a-z0-9 .&'’-]{0,60}\s+\b(?:pics?|pictures?|images?|photos?|photographs?)\b", q))
+    image_intent = (has_media_noun and asks_to_show) or subject_after_media or media_subject_first or subject_then_media or any(x in q for x in (
         "show gzu", "gzu pics", "gzu pictures", "gzu photos", "campus pics",
         "campus pictures", "pictures of gzu", "photos of gzu", "pics of gzu",
         "show me the pics", "show the pics", "show me the pictures",
@@ -1826,13 +1841,26 @@ def find_answer(message):
                     # A valid exam timetable must identify itself in its title or
                     # extracted body. Never present newsletters/handbooks as timetables.
                     combined = normalize(title + " " + text[:5000])
+                    url_path = urllib.parse.urlparse(item["url"]).path.lower()
+                    is_november_school_xlsx = (
+                        url_path.endswith(".xlsx") and "/2026/11/" in url_path and any(token in url_path for token in (
+                            "julius-nyerere", "school-of-natural-sciences", "simon-mazorodze",
+                            "robert-mugabe", "gary-magadzire", "herbert-chitepo", "munhumutapa"))
+                    )
+                    # The official page itself labels these seven school XLSX files
+                    # as the November 2026 final timetable. Their filenames don't
+                    # repeat "exam timetable", so verify the extracted workbook
+                    # has schedule-like dates/times rather than requiring that phrase.
+                    has_date_rows = bool(re.search(r"\b(?:\d{1,2}[/-](?:\d{1,2}|[a-z]{3,9})[/-]\d{2,4}|(?:mon|tue|wed|thu|fri|sat|sun)\w*[, ]+\d{1,2})\b", combined))
+                    has_time_rows = bool(re.search(r"\b(?:[01]?\d|2[0-3]):[0-5]\d\b|\b(?:08|09|10|11|12|13|14|15|16|17)\s*(?:00)?\b", combined))
                     looks_exam_schedule = any(term in combined for term in (
                         "exam timetable", "examination timetable", "examinations timetable",
                         "exam schedule", "examination schedule", "november 2026 examination",
                         "november 2026 exams", "final examination timetable", "draft examination timetable"))
                     looks_newsletter = any(term in normalize(title) for term in (
                         "newsletter", "annual report", "handbook", "prospectus", "magazine", "bulletin"))
-                    if text.strip() and looks_exam_schedule and not looks_newsletter:
+                    schedule_verified = looks_exam_schedule or (is_november_school_xlsx and has_date_rows and has_time_rows)
+                    if text.strip() and schedule_verified and not looks_newsletter:
                         extracted.append((title, item["url"], text))
                 if extracted:
                     chunks = []
