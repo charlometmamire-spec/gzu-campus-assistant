@@ -6,6 +6,7 @@ import time
 import os
 import urllib.request
 import urllib.error
+from html.parser import HTMLParser
 from difflib import SequenceMatcher
 from urllib.parse import quote_plus
 
@@ -805,11 +806,81 @@ def _tavily_search_context(question, official_first=False):
 
 
 
+class _GZUTimetableLinkParser(HTMLParser):
+    """Collect download anchors from the official GZU timetable page."""
+    def __init__(self):
+        super().__init__()
+        self.links = []
+        self._href = None
+        self._text = []
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() == "a":
+            attrs = dict(attrs)
+            self._href = attrs.get("href")
+            self._text = []
+    def handle_data(self, data):
+        if self._href is not None:
+            self._text.append(data)
+    def handle_endtag(self, tag):
+        if tag.lower() == "a" and self._href is not None:
+            self.links.append((self._href, " ".join(self._text).strip()))
+            self._href = None
+            self._text = []
+
+
+def _official_gzu_timetable_documents():
+    """Fetch live timetable download links from GZU, validating each link.
+
+    The official page is the source of truth. Never return dead links or
+    substitute an older timetable when the current file is unavailable.
+    """
+    page_url = "https://www.gzu.ac.zw/exam-timetable/"
+    try:
+        req = urllib.request.Request(page_url, headers={"User-Agent": "GZU-Campus-Assistant/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as response:
+            html = response.read().decode("utf-8", errors="replace")
+        parser = _GZUTimetableLinkParser()
+        parser.feed(html)
+        candidates = []
+        for href, label in parser.links:
+            url = urllib.parse.urljoin(page_url, href)
+            host = urllib.parse.urlparse(url).netloc.lower()
+            path = urllib.parse.urlparse(url).path.lower()
+            label_norm = normalize(label)
+            if host.endswith("gzu.ac.zw") and (path.endswith((".pdf", ".xlsx", ".xls", ".docx")) or "download" in label_norm):
+                candidates.append((label or "GZU examination timetable", url))
+        verified = []
+        seen = set()
+        for title, url in candidates[:12]:
+            if url in seen:
+                continue
+            seen.add(url)
+            try:
+                check = urllib.request.Request(url, headers={"User-Agent": "GZU-Campus-Assistant/1.0"}, method="HEAD")
+                with urllib.request.urlopen(check, timeout=5) as resp:
+                    ctype = (resp.headers.get("Content-Type") or "").lower()
+                    if 200 <= resp.status < 300 and ("pdf" in ctype or "spreadsheet" in ctype or url.lower().split("?",1)[0].endswith((".pdf", ".xlsx", ".xls"))):
+                        verified.append({"title": title[:180], "url": url})
+            except Exception as exc:
+                app.logger.info("GZU timetable download link unavailable (%s)", type(exc).__name__)
+        return verified, page_url
+    except Exception as exc:
+        app.logger.warning("Official GZU timetable page fetch failed (%s)", type(exc).__name__)
+        return [], page_url
+
+
 def _tavily_media_search(question, mode="images"):
     """Retrieve image URLs or document links only when explicitly requested."""
-    if not TAVILY_API_KEY:
-        return {"images": [], "documents": []}
     query = str(question).strip()
+    is_timetable_request = mode != "images" and any(term in normalize(query) for term in ("exam timetable", "examination timetable", "exam time table", "timetable"))
+    if is_timetable_request:
+        live_docs, official_page = _official_gzu_timetable_documents()
+        if live_docs:
+            return {"images": [], "documents": live_docs, "official_page": official_page, "verified_live": True}
+        # Do not fall through to general search for an old or third-party timetable.
+        return {"images": [], "documents": [], "official_page": official_page, "verified_live": False}
+    if not TAVILY_API_KEY:
+        return {"images": [], "documents": [], "official_page": "https://www.gzu.ac.zw/exam-timetable/" if is_timetable_request else None}
     body = {"query": query, "search_depth": "basic", "max_results": 5,
             "include_answer": False, "include_raw_content": False}
     if mode == "images":
@@ -1580,6 +1651,9 @@ def find_answer(message):
             return {"response": "I couldn't verify a current direct exam-timetable PDF on GZU's official domain. Please check the university's official pages for the latest notice:\n\nExaminations: https://www.gzu.ac.zw/examinations/\n\nExam timetable: https://www.gzu.ac.zw/exam-timetable\n\nNotices: https://www.gzu.ac.zw/category/notices/\n\nI won't label an older third-party timetable as the latest.", "location": None, "source": "official_gzu_timetable_fallback"}
         if media_mode == "documents" and media.get("documents"):
             links = "\n".join(f"- [{item['title']}]({item['url']})" for item in media["documents"])
+            if media.get("verified_live"):
+                intro = "I checked the live GZU examination timetable page and verified these currently accessible official timetable downloads. Please confirm whether each is marked tentative or final in the document:"
+            return {"response": intro + "\n\n" + links + "\n\nOfficial timetable page: https://www.gzu.ac.zw/exam-timetable/", "location": None, "source": "official_gzu_timetable_live"}
             return {"response": "I found these possible documents. Please verify the date and issuing office before relying on a timetable or policy:\n\n" + links, "location": None, "source": "tavily_documents"}
 
     medical_dean_answer = _official_medical_dean_answer(message)
