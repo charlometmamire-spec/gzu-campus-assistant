@@ -1,79 +1,65 @@
-GZU CAMPUS ASSISTANT — RELEASE PACKAGE
-=====================================
+GZU CAMPUS ASSISTANT — DEPLOYMENT GUIDE
+=======================================
 
-This package is intended to replace the project files in the existing GitHub
-repository, then let the connected Render service deploy from GitHub.
-It does not upload anything to GitHub or change Render settings for you.
+This project is deployed from the existing GitHub repository to Render.
+This guide describes the setup; it does not itself change GitHub or Render.
 
-BEFORE DEPLOYING
-----------------
-1. Download/keep a backup of the current GitHub repository.
-2. Extract this ZIP. Open the folder named gzu-campus-assistant-main.
-3. Upload/replace the files and folders inside that folder in the ROOT of the
-   existing GitHub repository. Keep the same repository and Render service.
-4. Do not delete the existing campus_chatbot.db or campus_directory.json.
-   The supplied copies are included for a complete package, but if the live
-   repository has newer records, keep those live copies instead.
-5. Commit the changes. Render should deploy automatically from GitHub.
-6. Do not put GEMINI_API_KEY in any file or in GitHub.
+## 1. Install dependencies locally (optional)
 
-RENDER SETTINGS
----------------
-The app reads GEMINI_API_KEY from the Render environment. You previously
-configured this variable; keep it private and do not send it in chat. The
-optional GEMINI_MODEL defaults to gemini-3.8-flash. No code change is needed
-for the key itself. If the key is missing, invalid, or over quota, the app
-falls back to a readable stored FAQ response when available rather than crashing.
+Use Python 3.10+ and run:
 
-AFTER DEPLOYMENT: CHECK THESE URLS
----------------------------------
-https://gzu-campus-assistant.onrender.com/health
-https://gzu-campus-assistant.onrender.com/manifest.json
-https://gzu-campus-assistant.onrender.com/service-worker.js
+    pip install -r requirements.txt
 
-Then test the chat with:
-- a greeting (e.g. Hello)
-- a fee/payment question
-- an admissions question
-- an examination/results question
-- a Mashava-specific question
-- a campus directory place name and a directions question
-- an unrelated question
+## 2. Required/optional environment variables
 
-LIVE OFFICIAL INFORMATION
--------------------------
-For general university questions, the app selects relevant pages from the
-official GZU website (www.gzu.ac.zw) and the official GZU e-learning domain
-(elearning.gzu.ac.zw), extracts page text, and asks Gemini to answer only from
-those extracts. The notices page is included to help surface current notices.
-Retrieved page text is cached in memory for 15 minutes to reduce repeated
-requests. This is live website retrieval, not a guarantee that the GZU site is
-reachable or that every answer is present on the site. If Gemini is unavailable but official page text was retrieved, the app now
-shows relevant source extracts directly (with their official URLs) instead of
-discarding the live evidence. If the website itself is unreachable or returns
-no relevant text, the existing FAQ fallback is used. Where retrieved fee
-extracts contain both 60% and 75% deposit figures, the answer explicitly flags
-the conflict and directs students to confirm with the GZU Bursar/Accounts
-Office. Confirm changing fees, deadlines, and personal account matters with
-the relevant official GZU office/portal.
+Set private keys in Render > Environment. Never place them in source files or GitHub.
 
-CAMPUS LOCATIONS
-----------------
-The existing campus directory data and matching functions are preserved. The
-location lookup is kept separate and runs before live website/Gemini handling.
-Directory entries marked unverified remain explicitly identified as such.
-Do not treat a Mashava-specific detail as applying to another campus.
+- AI_PROVIDER=groq
+- GROQ_API_KEY=<private Groq key>
+- GROQ_MODEL=openai/gpt-oss-120b
+- GEMINI_API_KEY=<private Gemini key>  (fallback provider)
+- TAVILY_API_KEY=<private Tavily key> (optional web retrieval)
 
-OFFLINE BEHAVIOUR
------------------
-The service worker caches the app shell/static files. The stored FAQ database
-can answer matching questions while the app server is running, but live
-website retrieval and Gemini require an internet connection. This is not a
-fully offline hosted chatbot: the browser cannot contact the Render server
-when the device has no connection.
+Do not paste any of these keys into chat, documentation, or public commits.
 
-SECURITY
---------
-Never commit API keys. The app only queries a fixed list of official GZU URLs
-and rejects redirects outside the official GZU domains. The key is sent only
-to Google's Gemini API when an answer is requested.
+## 3. Render configuration
+
+Keep the existing Render service and the exact start command:
+
+    gunicorn app:app --bind 0.0.0.0:$PORT
+
+Do not change the start command as part of routine source cleanup.
+
+## 4. GitHub update procedure
+
+1. Keep a backup of the current repository before replacing files.
+2. Upload the contents of the project folder into the root of the existing repository.
+3. For files intentionally removed from this cleaned package, delete those old tracked files in the same GitHub commit (or commit the repository's cleaned folder as a complete replacement).
+4. Commit the changes. Render should deploy automatically from the connected repository.
+5. Check the deployment logs and test the live app after Render finishes deploying.
+
+## 5. Post-deployment smoke checks
+
+Check:
+- https://gzu-campus-assistant.onrender.com/health
+- https://gzu-campus-assistant.onrender.com/manifest.json
+- https://gzu-campus-assistant.onrender.com/service-worker.js
+
+Then test a greeting, a fee/payment question, admissions, examinations/results, a Mashava-specific question, a campus location/directions request, an unrelated academic question, an image search, and a timetable request.
+
+## 6. Important behavior and limitations
+
+- GZU official information retrieval depends on the university website being reachable and containing relevant information.
+- Gemini/Groq availability and quotas are external dependencies.
+- Tavily search is optional and quota-limited; avoid unnecessary tests.
+- Timetable extraction requires the official downloadable Excel/PDF files to be accessible. If the official site returns broken links or unavailable files, the app should report that instead of inventing an exam schedule.
+- The browser PWA caches its app shell. This is not a fully offline hosted chatbot: chat server requests and live retrieval require connectivity.
+- If official fee sources conflict (for example, different deposit percentages), the response should flag the conflict and direct the student to confirm with the relevant GZU office.
+
+## 7. Campus locations
+
+The existing campus directory and Compass Locations implementation are preserved. Directory entries marked unverified remain unverified; do not generalize details from one campus to another.
+
+## 8. Security
+
+Never commit `GROQ_API_KEY`, `GEMINI_API_KEY`, `TAVILY_API_KEY`, or other credentials. Rotate any credential that was accidentally exposed in a public repository.
