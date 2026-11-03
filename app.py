@@ -930,8 +930,14 @@ def _tavily_media_search(question, mode="images"):
 
 def _media_intent(question):
     q = normalize(question)
-    image_intent = any(x in q for x in ("show me a picture", "show pictures", "show image", "show images",
-        "search images", "find images", "find a picture", "find pictures", "picture of", "pictures of", "show me pictures of", "photos of", "photo of", "images of"))
+    image_intent = any(x in q for x in (
+        "show me a picture", "show pictures", "show image", "show images",
+        "search images", "find images", "find a picture", "find pictures",
+        "picture of", "pictures of", "show me pictures of", "photos of",
+        "photo of", "images of", "show pics", "show me pics", "gzu pics",
+        "gzu pictures", "gzu photos", "campus pics", "campus pictures",
+        "show me the pics", "show the pics", "show me the pictures",
+        "show the photos", "show gzu", "pics of gzu", "pictures of gzu"))
     document_intent = any(x in q for x in ("find pdf", "find the pdf", "search pdf", "download pdf",
         "get the document", "find document", "show document", "exam timetable pdf", "timetable document",
         "download timetable", "find timetable", "get timetable", "retrieve timetable"))
@@ -1062,13 +1068,26 @@ def _gemini_post(payload, timeout=15, use_browser_search=None):
                     return json.loads(response.read().decode("utf-8"))
             except urllib.error.HTTPError as exc:
                 last_error = exc
+                # 404 means this model name is unavailable: try the next configured
+                # model.  429 is a quota/rate-limit signal; retrying the same
+                # request burns time and often worsens the limit, so stop this
+                # provider's loop and allow the other provider to take over.
                 if exc.code == 404:
-                    app.logger.warning("Gemini model %s returned 404; trying fallback model", model)
+                    app.logger.warning("Gemini model %s returned 404; trying next model", model)
                     break
-                if exc.code in (429, 500, 502, 503, 504) and attempt == 0:
-                    app.logger.warning("Gemini returned HTTP %s; retrying once", exc.code)
-                    time.sleep(0.6)
+                if exc.code == 429:
+                    app.logger.warning("Gemini returned HTTP 429 (quota/rate limit); skipping retries and trying configured backup")
+                    break
+                # Only retry transient server errors once. If they persist,
+                # move on to another model/provider rather than looping.
+                if exc.code in (500, 502, 503, 504) and attempt == 0:
+                    app.logger.warning("Gemini returned transient HTTP %s; retrying once", exc.code)
+                    time.sleep(0.5)
                     continue
+                if exc.code in (500, 502, 503, 504):
+                    app.logger.warning("Gemini model %s remains unavailable after one retry; trying next model", model)
+                    break
+                app.logger.warning("Gemini request failed with HTTP %s; trying configured backup", exc.code)
                 break
             except (TimeoutError, urllib.error.URLError) as exc:
                 last_error = exc
