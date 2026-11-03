@@ -8,7 +8,6 @@ import urllib.request
 import urllib.error
 from html.parser import HTMLParser
 from difflib import SequenceMatcher
-from io import BytesIO
 from urllib.parse import quote_plus
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
@@ -895,6 +894,100 @@ def _official_gzu_timetable_documents():
         return [], page_url
 
 
+class _OfficialTimetableTableParser(HTMLParser):
+    """Extract HTML tables from the official timetable page."""
+    def __init__(self):
+        super().__init__(); self.tables=[]; self.table=None; self.row=None; self.cell=None
+    def handle_starttag(self, tag, attrs):
+        t=tag.lower()
+        if t=="table": self.table=[]
+        elif t=="tr" and self.table is not None: self.row=[]
+        elif t in ("td","th") and self.row is not None: self.cell=[]
+    def handle_data(self, data):
+        if self.cell is not None: self.cell.append(data)
+    def handle_endtag(self, tag):
+        t=tag.lower()
+        if t in ("td","th") and self.cell is not None:
+            self.row.append(re.sub(r"\s+"," ","".join(self.cell)).strip()); self.cell=None
+        elif t=="tr" and self.row is not None:
+            if any(self.row): self.table.append(self.row)
+            self.row=None
+        elif t=="table" and self.table is not None:
+            if self.table: self.tables.append(self.table)
+            self.table=None
+
+
+def _extract_timetable_tables_from_official_page():
+    """Extract candidate schedule tables from GZU's official HTML without Tavily."""
+    url="https://www.gzu.ac.zw/exam-timetable/"
+    try:
+        req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 GZU-Campus-Assistant/1.0"})
+        with urllib.request.urlopen(req,timeout=9) as response:
+            html=response.read().decode("utf-8",errors="replace")
+        parser=_OfficialTimetableTableParser(); parser.feed(html)
+        good=[]
+        for table in parser.tables:
+            joined=" ".join(" ".join(row) for row in table)
+            lower=joined.lower()
+            has_time=bool(re.search(r"\b(?:0?[89]|1[0-9]|2[0-3]):[0-5][0-9]\b",lower))
+            has_date=bool(re.search(r"\b(?:\d{1,2}[-/]\w{3,9}[-/]\d{2,4}|\w{3,9}\s+\d{1,2},?\s+\d{4})\b",lower))
+            has_course=bool(re.search(r"\b[A-Z]{2,}[A-Z0-9]{2,}\b",joined))
+            if len(table)>=3 and (has_time or has_date) and has_course: good.append(table)
+        if not good:return ""
+        return "\n\n".join("\n".join(" | ".join(cell.replace("|","/") for cell in row) for row in table[:220]) for table in good[:6])[:16000]
+    except Exception as exc:
+        app.logger.info("Official timetable HTML table extraction unavailable (%s)",type(exc).__name__)
+        return ""
+
+
+def _extract_official_timetable_file(url, title="GZU timetable"):
+    """Download and extract readable table text from an official timetable file."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 GZU-Campus-Assistant/1.0"})
+        with urllib.request.urlopen(req, timeout=12) as response:
+            data = response.read(8 * 1024 * 1024 + 1)
+            ctype = (response.headers.get("Content-Type") or "").lower()
+            final_url = response.geturl()
+        if len(data) > 8 * 1024 * 1024:
+            return ""
+        path = urllib.parse.urlparse(final_url).path.lower()
+        if path.endswith((".xlsx", ".xlsm")) or "spreadsheet" in ctype or "excel" in ctype:
+            try:
+                from openpyxl import load_workbook
+                import io
+                wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+                parts = []
+                for ws in wb.worksheets[:8]:
+                    rows = []
+                    for row in ws.iter_rows(values_only=True):
+                        vals = [str(v).strip() if v is not None else "" for v in row]
+                        if any(vals): rows.append(vals[:12])
+                        if len(rows) >= 180: break
+                    if rows:
+                        parts.append("SHEET: " + ws.title + "\n" + "\n".join(" | ".join(r).rstrip(" |") for r in rows))
+                return "\n\n".join(parts)[:14000]
+            except Exception as exc:
+                app.logger.info("Timetable spreadsheet extraction failed (%s)", type(exc).__name__)
+                return ""
+        if path.endswith(".pdf") or "pdf" in ctype:
+            try:
+                from pypdf import PdfReader
+                import io
+                reader = PdfReader(io.BytesIO(data))
+                parts = []
+                for page in reader.pages[:35]:
+                    txt = page.extract_text() or ""
+                    if txt.strip(): parts.append(txt.strip())
+                return "\n\n".join(parts)[:14000]
+            except Exception as exc:
+                app.logger.info("Timetable PDF extraction failed (%s)", type(exc).__name__)
+                return ""
+        return ""
+    except Exception as exc:
+        app.logger.info("Official timetable download/extraction unavailable (%s)", type(exc).__name__)
+        return ""
+
+
 def _tavily_media_search(question, mode="images"):
     """Retrieve image URLs or document links only when explicitly requested."""
     query = str(question).strip()
@@ -905,13 +998,6 @@ def _tavily_media_search(question, mode="images"):
             return {"images": [], "documents": live_docs, "official_page": official_page, "verified_live": True}
         # Do not fall through to general search for an old or third-party timetable.
         return {"images": [], "documents": [], "official_page": official_page, "verified_live": False}
-    if mode == "images" and any(term in normalize(query) for term in ("gzu", "great zimbabwe", "campus")):
-        # GZU-specific imagery is curated locally; no external search credit needed.
-        return {"images": [
-            {"url": "https://www.gzu.ac.zw/wp-content/uploads/2024/02/RG-NEW-ACTUAL.jpg", "description": "Great Zimbabwe University campus"},
-            {"url": "https://www.gzu.ac.zw/wp-content/uploads/2025/05/Innovation-HUB-WEB-1024x576.jpg", "description": "GZU Innovation Hub"},
-            {"url": "https://www.gzu.ac.zw/wp-content/uploads/2024/02/IMG_7647.jpg", "description": "Great Zimbabwe University campus photo"}
-        ], "documents": []}
     if not TAVILY_API_KEY:
         return {"images": [], "documents": [], "official_page": "https://www.gzu.ac.zw/exam-timetable/" if is_timetable_request else None}
     body = {"query": query, "search_depth": "basic", "max_results": 5,
@@ -961,89 +1047,25 @@ def _tavily_media_search(question, mode="images"):
         return {"images": [], "documents": []}
 
 
-def _correct_media_typos(text):
-    """Normalize common misspellings of image/photo request words."""
-    tokens = normalize(text).split()
-    variants = {"image": ("image", "images", "immage", "immages", "imge", "imgaes"),
-                "picture": ("picture", "pictures", "pic", "pics", "pictur", "picturs"),
-                "photo": ("photo", "photos", "photograph", "photographs", "fotho", "phots")}
-    canonical = {variant: key for key, group in variants.items() for variant in group}
-    corrected = []
-    for token in tokens:
-        if token in canonical:
-            corrected.append(canonical[token]); continue
-        match = next((key for key, group in variants.items()
-                     if any(SequenceMatcher(None, token, v).ratio() >= 0.78 for v in group)), None)
-        corrected.append(match or token)
-    return " ".join(corrected)
-
-
-def _extract_timetable_file(url, title=""):
-    """Download and extract readable rows from an official Excel/PDF/Word timetable."""
-    path = urllib.parse.urlparse(url).path.lower()
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 GZU-Campus-Assistant/1.0"})
-    with urllib.request.urlopen(req, timeout=12) as response:
-        blob = response.read()
-    rows = []
-    if path.endswith((".xlsx", ".xlsm")):
-        try:
-            from openpyxl import load_workbook
-            workbook = load_workbook(BytesIO(blob), read_only=True, data_only=True)
-            for sheet in workbook.worksheets:
-                for row in sheet.iter_rows(values_only=True):
-                    values = [re.sub(r"\s+", " ", str(v)).strip() for v in row if v is not None and str(v).strip()]
-                    if values: rows.append(f"[{sheet.title}] " + " | ".join(values))
-            workbook.close()
-        except Exception as exc:
-            app.logger.info("Excel timetable extraction unavailable (%s)", type(exc).__name__)
-    elif path.endswith(".pdf") or blob[:4] == b"%PDF":
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(BytesIO(blob))
-            for page_no, page in enumerate(reader.pages, 1):
-                text = re.sub(r"[ \t]+", " ", page.extract_text() or "")
-                for line in text.splitlines():
-                    line = line.strip()
-                    if line: rows.append(f"[Page {page_no}] {line}")
-        except Exception as exc:
-            app.logger.info("PDF timetable extraction unavailable (%s)", type(exc).__name__)
-    elif path.endswith(".docx"):
-        try:
-            from docx import Document
-            doc = Document(BytesIO(blob))
-            rows.extend(p.text.strip() for p in doc.paragraphs if p.text.strip())
-            for table in doc.tables:
-                for row in table.rows:
-                    vals = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                    if vals: rows.append(" | ".join(vals))
-        except Exception as exc:
-            app.logger.info("Word timetable extraction unavailable (%s)", type(exc).__name__)
-    return rows[:100]
-
-
-def _format_extracted_timetable(documents):
-    """Try actual source downloads; return extracted text or an empty string."""
-    for item in documents[:8]:
-        url = item.get("url", "")
-        if not url.startswith("https://") or not urllib.parse.urlparse(url).netloc.lower().endswith("gzu.ac.zw"):
-            continue
-        try:
-            rows = _extract_timetable_file(url, item.get("title", ""))
-            if rows:
-                heading = item.get("title", "Official GZU examination timetable")
-                return "Extracted directly from the official file: **" + heading + "**\n\n" + "\n".join(f"- {r}" for r in rows)
-        except Exception as exc:
-            app.logger.info("Official timetable extraction failed (%s)", type(exc).__name__)
-    return ""
-
-
 def _media_intent(question):
-    q = _correct_media_typos(question)
+    q = normalize(question)
+    # Normalize common typing errors before intent detection. In particular,
+    # "immages of SKZ" must still reach the image-gallery pipeline.
+    q = re.sub(r"\bimm+ages?\b", "images", q)
+    q = re.sub(r"\bim+ages?\b", "images", q)
+    q = re.sub(r"\bpictuers?\b", "pictures", q)
+    q = re.sub(r"\bphots?\b", "photos", q)
     # Match natural requests with singular/plural and campus/member qualifiers,
     # not just a brittle list of exact phrases.
     has_media_noun = bool(re.search(r"\b(pic|pics|picture|pictures|photo|photos|image|images|photograph|photographs)\b", q))
     asks_to_show = bool(re.search(r"\b(show|find|get|display|send|give|fetch|look up|search)\b", q))
-    image_intent = (has_media_noun and asks_to_show) or any(x in q for x in (
+    # Many users phrase an image request without an imperative: "images of SKZ",
+    # "pics of a dog", "photos of Eiffel Tower". Treat those as image intent too.
+    subject_after_media = bool(re.search(
+        r"\b(?:pics?|pictures?|images?|photos?|photographs?)\b\s+(?:of|for|showing)\s+\w", q))
+    media_subject_first = bool(re.search(
+        r"\b(?:show|find|get|display|send|give|fetch|look up|search)\b.*\b(?:pics?|pictures?|images?|photos?)\b", q))
+    image_intent = (has_media_noun and asks_to_show) or subject_after_media or media_subject_first or any(x in q for x in (
         "show gzu", "gzu pics", "gzu pictures", "gzu photos", "campus pics",
         "campus pictures", "pictures of gzu", "photos of gzu", "pics of gzu",
         "show me the pics", "show the pics", "show me the pictures",
@@ -1767,6 +1789,15 @@ def find_answer(message):
     # Explicit media requests: search and return media metadata to the chat UI.
     media_mode = _media_intent(message)
     if media_mode:
+        # GZU campus imagery is served from known official URLs without calling
+        # Tavily, preserving the user's limited search credits.
+        if media_mode == "images" and any(term in normalize(message) for term in ("gzu", "great zimbabwe", "campus")):
+            official_images = [
+                {"url": "https://www.gzu.ac.zw/wp-content/uploads/2024/02/RG-NEW-ACTUAL.jpg", "description": "Great Zimbabwe University — official campus image"},
+                {"url": "https://www.gzu.ac.zw/wp-content/uploads/2025/05/Innovation-HUB-WEB-1024x576.jpg", "description": "GZU Innovation Hub — official image"},
+                {"url": "https://www.gzu.ac.zw/wp-content/uploads/2024/02/IMG_7647.jpg", "description": "Great Zimbabwe University — official campus photo"},
+            ]
+            return {"response": "Here are official GZU-hosted images. Select an image to open it.", "location": None, "images": official_images, "source": "gzu_official_image_fallback"}
         media = _tavily_media_search(message, media_mode)
         if media_mode == "images" and media.get("images"):
             return {"response": "Here are relevant images I found online. Open an image to view it. Check its source before reuse.", "location": None, "images": media["images"], "source": "tavily_images"}
@@ -1779,16 +1810,37 @@ def find_answer(message):
                 {"url": "https://www.gzu.ac.zw/wp-content/uploads/2024/02/IMG_7647.jpg", "description": "Great Zimbabwe University — official campus photo"},
             ]
             return {"response": "Here are official GZU-hosted images. Select an image to open it.", "location": None, "images": official_images, "source": "gzu_official_image_fallback"}
+        if media_mode == "documents" and any(term in normalize(message) for term in ("exam timetable", "examination timetable", "exam time table", "timetable")):
+            live_table_text = _extract_timetable_tables_from_official_page()
+            if live_table_text:
+                return {"response": "I extracted a timetable table directly from GZU's official page. Check whether the page labels it draft or final before relying on it.\n\n" + live_table_text + "\n\nOfficial timetable page: https://www.gzu.ac.zw/exam-timetable/", "location": None, "source": "official_gzu_timetable_html_table_extracted"}
         if media_mode == "documents" and not media.get("documents") and any(term in normalize(message) for term in ("exam timetable", "examination timetable", "exam time table", "timetable")):
             return {"response": "I checked GZU's official November 2026 examination timetable page. It currently displays the 3rd Draft / November 2026 timetable, but the school Excel download links on that page are returning 404 (file not found), so I cannot extract or verify the actual dates, times, and venues yet.\n\nOfficial timetable page: https://www.gzu.ac.zw/exam-timetable/\n\nExaminations Office: exams@gzu.ac.zw | +263 39 2266672\n\nI won't invent exam details or substitute an outdated timetable. If you upload the working Excel/PDF here, I can extract it immediately.", "location": None, "source": "official_gzu_timetable_links_unavailable"}
         if media_mode == "documents" and media.get("documents"):
             links = "\n".join(f"- [{item['title']}]({item['url']})" for item in media["documents"])
             if media.get("verified_live"):
-                extracted = _format_extracted_timetable(media["documents"])
+                extracted = []
+                for item in media["documents"][:4]:
+                    title = str(item.get("title", "Official timetable"))
+                    text = _extract_official_timetable_file(item["url"], title)
+                    # A valid exam timetable must identify itself in its title or
+                    # extracted body. Never present newsletters/handbooks as timetables.
+                    combined = normalize(title + " " + text[:5000])
+                    looks_exam_schedule = any(term in combined for term in (
+                        "exam timetable", "examination timetable", "examinations timetable",
+                        "exam schedule", "examination schedule", "november 2026 examination",
+                        "november 2026 exams", "final examination timetable", "draft examination timetable"))
+                    looks_newsletter = any(term in normalize(title) for term in (
+                        "newsletter", "annual report", "handbook", "prospectus", "magazine", "bulletin"))
+                    if text.strip() and looks_exam_schedule and not looks_newsletter:
+                        extracted.append((title, item["url"], text))
                 if extracted:
-                    return {"response": extracted + "\n\nOfficial source: https://www.gzu.ac.zw/exam-timetable/", "location": None, "source": "official_gzu_timetable_extracted"}
-                intro = "I verified these official timetable downloads, but could not extract readable rows from them automatically. You can still open the source files:"
-                return {"response": intro + "\n\n" + links + "\n\nOfficial timetable page: https://www.gzu.ac.zw/exam-timetable/", "location": None, "source": "official_gzu_timetable_live"}
+                    chunks = []
+                    for title, url, text in extracted:
+                        chunks.append("### " + title + "\nSource: " + url + "\n\n" + text)
+                    return {"response": "I downloaded and extracted text from the currently accessible official GZU timetable file(s). Please double-check whether the document is marked draft or final.\n\n" + "\n\n".join(chunks) + "\n\nOfficial timetable page: https://www.gzu.ac.zw/exam-timetable/", "location": None, "source": "official_gzu_timetable_extracted"}
+                intro = "I found official documents, but none passed verification as the November 2026 examination timetable. I rejected unrelated files (such as newsletters) rather than presenting them as exam schedules. Please use the official page or upload the correct Excel/PDF for extraction:"
+                return {"response": intro + "\n\n" + links + "\n\nOfficial timetable page: https://www.gzu.ac.zw/exam-timetable/", "location": None, "source": "official_gzu_timetable_live_not_extracted"}
             return {"response": "I found these possible documents. Please verify the date and issuing office before relying on a timetable or policy:\n\n" + links, "location": None, "source": "tavily_documents"}
 
     medical_dean_answer = _official_medical_dean_answer(message)
