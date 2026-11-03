@@ -898,7 +898,13 @@ def _groq_post(payload, timeout=15, use_browser_search=False):
     req = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": "Bearer " + GROQ_API_KEY},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + GROQ_API_KEY,
+            # Groq's edge protection can reject urllib's default Python UA
+            # with HTTP 403 / error 1010. Identify this app explicitly.
+            "User-Agent": "Mozilla/5.0 (compatible; GZU-Campus-Assistant/2.0; +https://www.gzu.ac.zw/)",
+        },
         method="POST")
     try:
         chunks = []
@@ -921,7 +927,13 @@ def _groq_post(payload, timeout=15, use_browser_search=False):
         return {"candidates": [{"content": {"parts": [{"text": answer}]}}]} if answer else {"candidates": []}
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:350]
-        app.logger.warning("Groq API returned HTTP %s: %s", exc.code, detail)
+        if exc.code == 403 and "1010" in detail:
+            app.logger.warning(
+                "Groq edge protection blocked this request (HTTP 403 / code 1010). "
+                "The request includes an explicit app User-Agent; using configured backup."
+            )
+        else:
+            app.logger.warning("Groq API returned HTTP %s: %s", exc.code, detail)
         raise
     except (TimeoutError, urllib.error.URLError) as exc:
         app.logger.warning("Groq connection failed (%s)", type(exc).__name__)
