@@ -843,21 +843,8 @@ def _tavily_media_search(question, mode="images"):
                 title = str(item.get("title", "Official document"))[:180]
                 is_timetable = any(term in normalize(query) for term in ("exam timetable", "examination timetable", "exam time table", "timetable"))
                 official = url.lower().split("/", 3)[2].endswith("gzu.ac.zw") if url.startswith("https://") else False
-                content_text = str(item.get("content", ""))
-                looks_pdf = url.lower().split("?", 1)[0].endswith(".pdf") or "pdf" in content_text.lower()
-                # Avoid returning an unrelated PDF (e.g. a procedure manual when
-                # the user asked for the Student Handbook). Match requested type.
-                qnorm = normalize(query)
-                doc_terms = []
-                if "handbook" in qnorm:
-                    doc_terms = ["handbook"]
-                elif any(t in qnorm for t in ("exam timetable", "examination timetable", "exam time table", "timetable")):
-                    doc_terms = ["timetable", "exam"]
-                elif "fees" in qnorm or "fee structure" in qnorm:
-                    doc_terms = ["fees", "fee structure", "bursar"]
-                title_content = normalize(title + " " + content_text)
-                relevant = not doc_terms or any(term in title_content for term in doc_terms)
-                acceptable = looks_pdf and relevant and (official if is_timetable else True)
+                looks_pdf = url.lower().split("?", 1)[0].endswith(".pdf") or "pdf" in str(item.get("content", "")).lower()
+                acceptable = looks_pdf and (official if is_timetable else True)
                 if url.startswith("https://") and acceptable:
                     if url not in seen:
                         seen.add(url)
@@ -1452,22 +1439,13 @@ def _clean_model_markdown(text):
     """Normalize AI's over-escaped Markdown while preserving URLs and code."""
     if not isinstance(text, str):
         return text
-    # Normalize malformed/over-escaped Markdown produced by model output.
-    # Do not strip backslashes globally: URLs and code may legitimately contain them.
+    # The model sometimes emits literal backslashes before Markdown syntax.
     text = re.sub(r"\\([*_`~\[\]()>])", r"\1", text)
+    # Remove escaped whitespace artifacts from generated markdown lists.
     text = re.sub(r"(?m)^\\\*\s+", "- ", text)
-    # Repair duplicated/malformed link wrappers such as:
-    # [label]\([https://site/path](https://site/path))
-    link_pattern = re.compile(
-        r"\[([^\]]+)\]\\?\(\[?(https?://[^\s\]\)]+)\]?"
-        r"(?:\)?(?:\(\[?(https?://[^\s\]\)]+)\]?\))?"
-    )
-    def repair_link(match):
-        label, first_url, second_url = match.group(1), match.group(2), match.group(3)
-        url = second_url or first_url
-        return f"[{label}]({url})"
-    text = link_pattern.sub(repair_link, text)
-    # Remove only Markdown-style brackets surrounding bare URLs.
+    # Repair the frequent malformed link: [label]\([url](url))
+    text = re.sub(r"\[([^\]]+)\]\\?\(\[?(https?://[^\s\]\)]+)\]?\)", r"[\1](\2)", text)
+    # Normalize duplicate wrappers around bare URLs without escaping them.
     text = re.sub(r"\\?\[(https?://[^\]\s]+)\\?\]", r"\1", text)
     text = text.replace(r"\&", "&")
     return text.strip()
@@ -1527,14 +1505,15 @@ def find_answer(message):
         ), "location": None, "source": "official_gzu_contact"}
     if qquick in {"how do i register", "how to register", "registration at gzu", "gzu registration"}:
         return {"response": (
-            "**GZU registration — start here**\n\n"
-            "1. Open the [GZU Student Portal](https://studentportal.gzu.ac.zw/).\n"
-            "2. **New students:** use the portal’s *Create Your Account* option and your GZU registration number and National ID details, then sign in.\n"
-            "3. **Returning students:** sign in with your existing portal account.\n"
-            "4. Open **Registration**, review the semester and modules shown, and complete the portal’s registration step when eligible.\n"
-            "5. Download/save the registration confirmation. If the portal blocks registration because of fees or account status, contact Accounts/Registry rather than guessing.\n\n"
-            "Use the current [registration notices](https://www.gzu.ac.zw/category/notices/) and [Student Registration Manual](https://www.gzu.ac.zw/admissions/) for semester-specific requirements. The current GZU 2026 Bursar notice says **75% of semester fees** is required for registration; confirm your balance in the portal before paying.\n\n"
-            "Are you a **new student** or a **returning student**? I can narrow the steps to your case."
+            "GZU registration generally involves using the relevant university portal, "
+            "following the current registration notice, completing required details, "
+            "and meeting the published payment and document requirements.\n\n"
+            "Useful official links:\n"
+            "- Student portal: https://studentportal.gzu.ac.zw/\n"
+            "- Official notices: https://www.gzu.ac.zw/category/notices/\n"
+            "- Contact GZU: https://www.gzu.ac.zw/contact-us-2/\n\n"
+            "Are you registering as a **new student** or doing **semester/course registration**? "
+            "The steps differ, and I can guide you accordingly."
         ), "location": None, "source": "registration_router"}
 
     # Give a safe, official-source-based admissions starter answer immediately.
