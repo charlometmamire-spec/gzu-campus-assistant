@@ -43,10 +43,3 @@ NOT RUN — Live Render deployment or browser session. No GitHub push or Render 
 - The app's PWA shell can cache static assets, but chat and live retrieval are not fully offline.
 
 This report distinguishes static/source checks from live external-service checks; it does not claim that every deployed feature was verified end-to-end.
-
-
-## November 2026 timetable offline extraction
-- Timetable extraction now uses a bundled official Excel archive and OpenPyXL locally; it does not spend AI/search API credits.
-- Exact final-sheet title validation rejects draft workbooks.
-- The supplied archive was inspected and contains six distinct FINAL school workbooks; the Gary Magadzire School workbook is absent. The app therefore only displays records available in the bundled files and does not invent the missing school's schedule.
-- Full extracted records and combined table should be checked against the source Excel sheets before academic use.
