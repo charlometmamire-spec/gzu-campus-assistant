@@ -1736,43 +1736,6 @@ def find_answer(message):
         return _greeting_response(message)
 
     qquick = normalize(message)
-
-    # The Compass button is an invitation to browse the directory, not a
-    # request to resolve a specific place. Start a friendly guided prompt.
-    compass_entry_phrases = {
-        "compass location", "open compass location", "compass navigation",
-        "campus locations", "campus directory", "find a campus location",
-        "help me find a place", "where can i go",
-    }
-    if qquick in compass_entry_phrases:
-        choices = directory_choices()
-        names = [item["name"] for item in choices]
-        count = len(names)
-        if names:
-            return {
-                "response": (
-                    "Hi there! 👋 Welcome to GZU Compass Locations.\n\n"
-                    "I’m here to help you find your way around Great Zimbabwe University. "
-                    f"There are currently {count} places in the campus directory.\n\n"
-                    "Where would you like to go? You can select a place from the list "
-                    "below or type its name, and I’ll help you with the location and directions.\n\n"
-                    "Please confirm unverified locations with university staff."
-                ),
-                "location": None,
-                "choices": names,
-                "directory_count": count,
-                "source": "compass_directory_welcome",
-            }
-        return {
-            "response": (
-                "Hi there! 👋 I’m ready to help you find a campus location, "
-                "but the directory is temporarily unavailable. Please try again shortly."
-            ),
-            "location": None,
-            "choices": [],
-            "directory_count": 0,
-            "source": "compass_directory_unavailable",
-        }
     if any(term in qquick for term in ("how can i contact gzu", "contact gzu", "gzu contact details", "gzu phone number", "gzu email address")):
         return {"response": (
             "You can contact Great Zimbabwe University through its general contacts:\n\n"
@@ -2031,6 +1994,7 @@ def service_worker():
 
 
 @app.route("/chat", methods=["POST"])
+
 def _offline_november_2026_timetable_response():
     """Extract bundled official FINAL Nov 2026 school Excel files without API calls."""
     import zipfile, io, os
@@ -2109,7 +2073,6 @@ def _offline_november_2026_timetable_response():
         return None
 
 
-
 def chat():
     data = request.get_json(silent=True) or {}
     message = str(data.get("message", "")).strip()
@@ -2121,14 +2084,32 @@ def chat():
         }), 400
 
     qnorm = normalize(message)
+
+    # Compass button entry is a directory invitation, not a failed place lookup.
+    if qnorm in {"compass location", "open compass location", "campus locations",
+                  "campus directory", "compass navigation", "find a campus location"}:
+        choices = directory_choices()
+        names = [item["name"] for item in choices]
+        result = {
+            "response": ("Hi there! 👋 Welcome to GZU Compass Locations.\\n\\n"
+                        "I’m here to help you find your way around Great Zimbabwe University. "
+                        f"There are currently {len(names)} places in the directory.\\n\\n"
+                        "Where would you like to go? Select a place below or type its name, "
+                        "and I’ll help you find it.\\n\\n"
+                        "Please confirm unverified locations with university staff."),
+            "location": None, "choices": names, "source": "compass_directory_welcome"
+        }
+        log_chat(message, result["response"])
+        return jsonify(result)
+
     timetable_intent = any(term in qnorm for term in (
         "timetable", "time table", "exam schedule", "examination schedule",
         "exam dates", "when are exams", "november exams", "november 2026"))
     if timetable_intent and any(term in qnorm for term in ("2026", "november", "exam", "examination")):
-        timetable_result = _offline_november_2026_timetable_response()
-        if timetable_result:
-            log_chat(message, timetable_result["response"])
-            return jsonify(timetable_result)
+        result = _offline_november_2026_timetable_response()
+        if result:
+            log_chat(message, result["response"])
+            return jsonify(result)
 
     result = find_answer(message)
     log_chat(message, result["response"])
