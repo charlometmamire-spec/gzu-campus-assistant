@@ -48,7 +48,3 @@ Never commit API keys, passwords, or private credentials. Configure secrets in t
 ## Official links
 - GZU examination timetable: https://www.gzu.ac.zw/exam-timetable/
 - Deployed application: https://gzu-campus-assistant.onrender.com
-
-
-## November 2026 timetable data
-The package includes a local archive of official FINAL November 2026 school Excel files under `static/data/`. Timetable extraction runs locally with OpenPyXL and does not call Groq, Gemini, or Tavily. The supplied source archive contains six distinct schools; Gary Magadzire School of Agriculture and Engineering was not present in the provided ZIP, so its schedule is not fabricated. Check the official GZU timetable page for updates: https://www.gzu.ac.zw/exam-timetable/
