@@ -1,0 +1,45 @@
+GZU CAMPUS ASSISTANT — CONSOLIDATED TEST REPORT
+================================================
+Review/package date: 3 November 2026
+
+## Checks completed in the available build environment
+
+PASS — ZIP archive integrity (`zipfile.testzip()`).
+PASS — Python syntax compilation of `app.py` (`python -m py_compile`).
+PASS — Python AST parsing of `app.py`.
+PASS — Inline JavaScript extracted from `templates/index.html` checked with Node.js `--check`.
+PASS — `campus_directory.json` parses as valid JSON.
+PASS — SQLite database integrity check returns `ok`.
+PASS — PWA manifest parses and references the included 192×192 and 512×512 PNG icons.
+PASS — Python bytecode/cache folder excluded from the cleaned submission package.
+PASS — Groq model `openai/gpt-oss-120b` and configured generation parameters preserved in the reviewed package.
+PASS — Gemini fallback retained.
+PASS — General academic routing is not restricted to GZU-only sources.
+PASS — GZU-specific retrieval and timetable intent are routed to official-source workflows.
+PASS — Timetable logic is designed to avoid invented dates and to report unavailable official attachments.
+PASS — Campus directory and Compass Locations source files were preserved without edits in this documentation cleanup.
+
+## Behavior reviewed
+
+- General academic questions route to the general AI; GZU-specific questions use GZU context.
+- Student shorthand may be interpreted when the context makes its meaning clear.
+- Tavily is an optional bounded retrieval layer for current/dynamic questions and explicit web-search requests.
+- Image/document intent handling and existing gallery/link rendering remain in the application.
+- Timetable discovery follows official GZU sources and verifies downloadable attachment links.
+- Campus directions remain based on the existing directory; unverified entries should remain clearly unverified.
+
+## Not verified in this environment
+
+NOT RUN — Full Flask runtime/HTTP test client, because Flask is not installed in this isolated environment.
+NOT RUN — Live Groq, Gemini, or Tavily calls; private Render credentials were not accessed.
+NOT RUN — Current external GZU page/file availability; network access is unavailable here.
+NOT RUN — Live Render deployment or browser session. No GitHub push or Render configuration change was performed.
+
+## Known external limitations
+
+- AI provider availability, rate limits, and hosting/network restrictions are external.
+- Image search depends on configured Tavily quota and external image hosts.
+- Official examination timetable files may be temporarily unavailable or return errors. The app should communicate that accurately rather than present unverified schedules.
+- The app's PWA shell can cache static assets, but chat and live retrieval are not fully offline.
+
+This report distinguishes static/source checks from live external-service checks; it does not claim that every deployed feature was verified end-to-end.
