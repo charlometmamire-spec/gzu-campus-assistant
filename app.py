@@ -1994,6 +1994,85 @@ def service_worker():
 
 
 @app.route("/chat", methods=["POST"])
+
+def _offline_november_2026_timetable_response():
+    """Extract bundled official FINAL Nov 2026 school Excel files without API calls."""
+    import zipfile, io, os
+    try:
+        import openpyxl
+    except Exception:
+        return None
+    archive_path = os.path.join(os.path.dirname(__file__), "static", "data", "november_2026_final_timetables.zip")
+    if not os.path.isfile(archive_path):
+        return None
+    wanted_schools = [
+        "HERBERT-CHITEPO-LAW-SCHOOL.xlsx",
+        "JULIUS-NYERERE-SCHOOL-OF-SOCIAL-SCIENCES.xlsx",
+        "MUNHUMUTAPA-SCHOOL-OF-BUSINESS-SCIENCES.xlsx",
+        "ROBERT-MUGABE-SCHOOL-OF-HERITAGE-AND-EDUCATION.xlsx",
+        "SCHOOL-OF-NATURAL-SCIENCES.xlsx",
+        "SIMON-MAZORODZE-SCHOOL-OF-MEDICAL-AND-HEALTH-SCIENCES-6.xlsx",
+        "GARY-MAGADZIRE-SCHOOL-OF-AGRICULTURE-AND-ENGINEERING.xlsx",
+    ]
+    rows = []
+    schools_found = set()
+    try:
+        with zipfile.ZipFile(archive_path) as bundle:
+            names = bundle.namelist()
+            for expected in wanted_schools:
+                match = next((n for n in names if n.rsplit("/",1)[-1].upper() == expected.upper()), None)
+                if not match:
+                    continue
+                wb = openpyxl.load_workbook(io.BytesIO(bundle.read(match)), data_only=True, read_only=True)
+                ws = wb[wb.sheetnames[0]]
+                school = expected.replace(".xlsx","").replace("-"," ").title()
+                # Verify workbook's own title says FINAL and November 2026.
+                title_cells = " ".join(str(ws.cell(r,c).value or "") for r in range(1,4) for c in range(1,5))
+                if "FINAL" not in title_cells.upper() or "NOVEMBER 2026" not in title_cells.upper():
+                    continue
+                schools_found.add(school)
+                header_row = None
+                headers = []
+                for ridx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+                    vals = [str(v).strip().upper() if v is not None else "" for v in row]
+                    if "DATE" in vals and "TIME" in vals and ("COURSECODE" in vals or "COURSE CODE" in vals):
+                        header_row = ridx
+                        headers = vals
+                        break
+                if not header_row:
+                    continue
+                def col(*names):
+                    return next((headers.index(n) for n in names if n in headers), None)
+                ci_date=col("DATE"); ci_time=col("TIME"); ci_course=col("COURSECODE","COURSE CODE")
+                ci_desc=col("NARRATION","COURSE NAME","COURSE"); ci_venue=col("VENUE")
+                for row in ws.iter_rows(min_row=header_row+1, values_only=True):
+                    def val(i):
+                        return row[i] if i is not None and i < len(row) else None
+                    datev, timev, coursev = val(ci_date), val(ci_time), val(ci_course)
+                    if not datev or not timev or not coursev: continue
+                    descv, venuev = val(ci_desc), val(ci_venue)
+                    rows.append((str(datev).strip(), str(timev).strip(), str(coursev).strip(),
+                                 str(descv or "").strip(), str(venuev or "").strip(), school))
+        if not rows:
+            return None
+        # Deduplicate exact repeated records and sort by date/time/course.
+        unique = list(dict.fromkeys(rows))
+        lines = ["## November 2026 Final Examination Timetable",
+                 f"Extracted from the bundled official final timetables for {len(schools_found)} school(s).",
+                 "", "| Date | Time | Course code | Course name | Venue | School |",
+                 "|---|---|---|---|---|---|"]
+        for datev,timev,coursev,descv,venuev,school in unique:
+            def cell(x): return str(x).replace("|","\\|").replace("\n"," ")
+            lines.append("| " + " | ".join(cell(x) for x in (datev,timev,coursev,descv,venuev,school)) + " |")
+        lines += ["", "Official timetable page: https://www.gzu.ac.zw/exam-timetable/",
+                  "Please confirm any last-minute changes with your school."]
+        return {"response":"\n".join(lines), "location":None, "source":"offline_official_november_2026_timetable",
+                "timetable_schools":len(schools_found), "timetable_records":len(unique)}
+    except Exception:
+        app.logger.exception("Bundled November 2026 timetable extraction failed")
+        return None
+
+
 def chat():
     data = request.get_json(silent=True) or {}
     message = str(data.get("message", "")).strip()
@@ -2003,6 +2082,34 @@ def chat():
             "response": "Please enter a question.",
             "location": None,
         }), 400
+
+    qnorm = normalize(message)
+
+    # Compass button entry is a directory invitation, not a failed place lookup.
+    if qnorm in {"compass location", "open compass location", "campus locations",
+                  "campus directory", "compass navigation", "find a campus location"}:
+        choices = directory_choices()
+        names = [item["name"] for item in choices]
+        result = {
+            "response": ("Hi there! 👋 Welcome to GZU Compass Locations.\\n\\n"
+                        "I’m here to help you find your way around Great Zimbabwe University. "
+                        f"There are currently {len(names)} places in the directory.\\n\\n"
+                        "Where would you like to go? Select a place below or type its name, "
+                        "and I’ll help you find it.\\n\\n"
+                        "Please confirm unverified locations with university staff."),
+            "location": None, "choices": names, "source": "compass_directory_welcome"
+        }
+        log_chat(message, result["response"])
+        return jsonify(result)
+
+    timetable_intent = any(term in qnorm for term in (
+        "timetable", "time table", "exam schedule", "examination schedule",
+        "exam dates", "when are exams", "november exams", "november 2026"))
+    if timetable_intent and any(term in qnorm for term in ("2026", "november", "exam", "examination")):
+        result = _offline_november_2026_timetable_response()
+        if result:
+            log_chat(message, result["response"])
+            return jsonify(result)
 
     result = find_answer(message)
     log_chat(message, result["response"])
