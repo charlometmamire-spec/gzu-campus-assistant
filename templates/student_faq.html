@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Frequently Asked Questions | GZU</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 25px 16px;
+            background: #f1f5f9;
+            font-family: Arial, sans-serif;
+            color: #1e293b;
+        }
+
+        .container {
+            max-width: 850px;
+            margin: 25px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+        }
+
+        h1 {
+            color: #123c69;
+            margin-bottom: 8px;
+        }
+
+        .intro {
+            color: #64748b;
+            line-height: 1.6;
+        }
+
+        .search {
+            width: 100%;
+            padding: 14px;
+            margin: 22px 0;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .faq-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .faq-question {
+            width: 100%;
+            padding: 17px;
+            background: white;
+            border: none;
+            text-align: left;
+            font-size: 16px;
+            font-weight: bold;
+            color: #123c69;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .faq-question:hover {
+            background: #f8fafc;
+        }
+
+        .faq-answer {
+            display: none;
+            padding: 0 17px 17px;
+            color: #475569;
+            line-height: 1.7;
+            white-space: pre-wrap;
+        }
+
+        .faq-item.open .faq-answer {
+            display: block;
+        }
+
+        .status {
+            color: #64748b;
+            padding: 15px 0;
+        }
+
+        .back {
+            display: inline-block;
+            margin-top: 20px;
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Frequently Asked Questions</h1>
+
+    <p class="intro">
+        Welcome to the Great Zimbabwe University FAQ section.
+        Search for common questions and find helpful answers
+        about university services and student information.
+    </p>
+
+    <input
+        type="search"
+        id="searchInput"
+        class="search"
+        placeholder="Search questions..."
+        aria-label="Search frequently asked questions"
+    >
+
+    <div id="faqList" aria-live="polite">
+        <p class="status">Loading frequently asked questions...</p>
+    </div>
+
+    <a href="/" class="back">
+        ← Return to GZU Campus Assistant
+    </a>
+
+</div>
+
+<script>
+    const faqList = document.getElementById("faqList");
+    const searchInput = document.getElementById("searchInput");
+
+    let allFAQs = [];
+
+    function displayFAQs(searchTerm = "") {
+        faqList.replaceChildren();
+
+        const term = searchTerm.toLowerCase().trim();
+
+        const filtered = allFAQs.filter(faq =>
+            faq.question.toLowerCase().includes(term) ||
+            faq.answer.toLowerCase().includes(term)
+        );
+
+        if (filtered.length === 0) {
+            const message = document.createElement("p");
+            message.className = "status";
+            message.textContent = "No matching questions found.";
+            faqList.appendChild(message);
+            return;
+        }
+
+        filtered.forEach(faq => {
+            const item = document.createElement("div");
+            item.className = "faq-item";
+
+            const question = document.createElement("button");
+            question.className = "faq-question";
+            question.type = "button";
+            question.setAttribute("aria-expanded", "false");
+
+            const questionText = document.createElement("span");
+            questionText.textContent = faq.question;
+
+            const arrow = document.createElement("span");
+            arrow.textContent = "+";
+
+            question.append(questionText, arrow);
+
+            const answer = document.createElement("div");
+            answer.className = "faq-answer";
+            answer.textContent = faq.answer;
+
+            question.addEventListener("click", () => {
+                const isOpen = item.classList.toggle("open");
+
+                question.setAttribute(
+                    "aria-expanded",
+                    String(isOpen)
+                );
+
+                arrow.textContent = isOpen ? "−" : "+";
+            });
+
+            item.append(question, answer);
+            faqList.appendChild(item);
+        });
+    }
+
+    async function loadFAQs() {
+        try {
+            const response = await fetch("/api/faqs");
+
+            if (!response.ok) {
+                throw new Error("Unable to load FAQs.");
+            }
+
+            allFAQs = await response.json();
+            displayFAQs();
+
+        } catch (error) {
+            faqList.textContent =
+                "We could not load the FAQs. Please try again later.";
+        }
+    }
+
+    searchInput.addEventListener("input", event => {
+        displayFAQs(event.target.value);
+    });
+
+    loadFAQs();
+</script>
+
+</body>
+</html>
