@@ -2046,5 +2046,23 @@ def chat():
     return jsonify(result)
 
 
+# ---------------------------------------------------------
+# ADMIN PORTAL AND STUDENT FAQ INTEGRATION
+# ---------------------------------------------------------
+
+from admin_portal import register_admin_routes
+
+register_admin_routes(app, DB_PATH)
+
+
+@app.route("/faqs")
+def student_faq():
+    return render_template("student_faq.html")
+
+
+# ---------------------------------------------------------
+# START FLASK APPLICATION
+# ---------------------------------------------------------
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
