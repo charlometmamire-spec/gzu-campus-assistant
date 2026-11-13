@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | GZU Campus Assistant</title>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+
+        header {
+            background: #123c69;
+            color: white;
+            padding: 20px 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        header h2 { margin: 0; }
+
+        .logout {
+            color: white;
+            text-decoration: none;
+            border: 1px solid white;
+            padding: 9px 14px;
+            border-radius: 6px;
+        }
+
+        main {
+            max-width: 1100px;
+            margin: 30px auto;
+            padding: 0 18px;
+        }
+
+        .panel {
+            background: white;
+            padding: 24px;
+            margin-bottom: 22px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,.05);
+        }
+
+        h3 { color: #123c69; }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin: 14px 0 7px;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font: inherit;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px 4px 5px 0;
+        }
+
+        .primary { background: #123c69; color: white; }
+        .secondary { background: #e2e8f0; color: #1e293b; }
+        .danger { background: #fee2e2; color: #991b1b; }
+
+        button:hover { opacity: .85; }
+
+        .faq-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 12px 0;
+        }
+
+        .faq-question {
+            font-weight: bold;
+            color: #123c69;
+            margin-bottom: 8px;
+        }
+
+        .faq-answer {
+            color: #475569;
+            white-space: pre-wrap;
+        }
+
+        .message {
+            margin: 12px 0;
+            padding: 12px;
+            border-radius: 6px;
+            background: #eff6ff;
+            color: #1e40af;
+        }
+
+        .empty { color: #64748b; }
+
+        @media (max-width: 600px) {
+            .panel { padding: 17px; }
+            header { padding: 18px; }
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h2>GZU Admin Dashboard</h2>
+
+    <form method="POST" action="/admin/logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="logout" type="submit">Logout</button>
+    </form>
+</header>
+
+<main>
+
+    <section class="panel">
+        <h3 id="formTitle">Add a New FAQ</h3>
+
+        <form id="faqForm">
+            <label for="question">Question</label>
+            <input
+                type="text"
+                id="question"
+                placeholder="Enter the question"
+                required
+            >
+
+            <label for="answer">Answer</label>
+            <textarea
+                id="answer"
+                placeholder="Enter the approved answer"
+                required
+            ></textarea>
+
+            <button type="submit" class="primary" id="saveButton">
+                Save FAQ
+            </button>
+
+            <button
+                type="button"
+                class="secondary"
+                id="cancelButton"
+                hidden
+            >
+                Cancel Edit
+            </button>
+        </form>
+
+        <div id="message" class="message" hidden></div>
+    </section>
+
+    <section class="panel">
+        <h3>Manage Frequently Asked Questions</h3>
+
+        <p class="empty">
+            Add, edit or remove questions and answers available to students.
+        </p>
+
+        <div id="faqList">Loading FAQs...</div>
+    </section>
+
+    <section class="panel">
+        <h3>Administrator Activity</h3>
+        <div id="activityList">Loading activity...</div>
+    </section>
+
+</main>
+
+<script>
+    const csrfToken = {{ csrf_token | tojson }};
+    const faqList = document.getElementById("faqList");
+    const faqForm = document.getElementById("faqForm");
+    const questionInput = document.getElementById("question");
+    const answerInput = document.getElementById("answer");
+    const messageBox = document.getElementById("message");
+
+    let editingId = null;
+
+    function showMessage(message) {
+        messageBox.textContent = message;
+        messageBox.hidden = false;
+    }
+
+    async function apiRequest(url, method, data) {
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": csrfToken
+            },
+            body: data ? JSON.stringify(data) : undefined
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || "Request failed");
+        }
+
+        return result;
+    }
+
+    async function loadFAQs() {
+        faqList.textContent = "Loading FAQs...";
+
+        try {
+            const response = await fetch("/api/faqs");
+            if (!response.ok) throw new Error("Could not load FAQs");
+
+            const faqs = await response.json();
+            faqList.replaceChildren();
+
+            if (!faqs.length) {
+                faqList.textContent = "No FAQs have been added yet.";
+                faqList.className = "empty";
+                return;
+            }
+
+            faqs.forEach(faq => {
+                const item = document.createElement("div");
+                item.className = "faq-item";
+
+                const question = document.createElement("div");
+                question.className = "faq-question";
+                question.textContent = faq.question;
+
+                const answer = document.createElement("div");
+                answer.className = "faq-answer";
+                answer.textContent = faq.answer;
+
+                const editButton = document.createElement("button");
+                editButton.className = "secondary";
+                editButton.textContent = "Edit";
+
+                editButton.addEventListener("click", () => {
+                    editingId = faq.id;
+                    questionInput.value = faq.question;
+                    answerInput.value = faq.answer;
+                    document.getElementById("formTitle").textContent =
+                        "Edit FAQ";
+                    document.getElementById("saveButton").textContent =
+                        "Update FAQ";
+                    document.getElementById("cancelButton").hidden = false;
+                    questionInput.focus();
+                });
+
+                const deleteButton = document.createElement("button");
+                deleteButton.className = "danger";
+                deleteButton.textContent = "Delete";
+
+                deleteButton.addEventListener("click", async () => {
+                    if (!confirm("Are you sure you want to delete this FAQ?")) {
+                        return;
+                    }
+
+                    try {
+                        await apiRequest(
+                            "/admin/api/faqs",
+                            "DELETE",
+                            { id: faq.id }
+                        );
+                        showMessage("FAQ deleted successfully.");
+                        loadFAQs();
+                    } catch (error) {
+                        showMessage(error.message);
+                    }
+                });
+
+                item.append(question, answer, editButton, deleteButton);
+                faqList.appendChild(item);
+            });
+
+        } catch (error) {
+            faqList.textContent = error.message;
+        }
+    }
+
+    faqForm.addEventListener("submit", async event => {
+        event.preventDefault();
+
+        const question = questionInput.value.trim();
+        const answer = answerInput.value.trim();
+
+        if (!question || !answer) {
+            showMessage("Please enter both a question and an answer.");
+            return;
+        }
+
+        try {
+            if (editingId === null) {
+                await apiRequest(
+                    "/admin/api/faqs",
+                    "POST",
+                    { question, answer }
+                );
+                showMessage("New FAQ added successfully.");
+            } else {
+                await apiRequest(
+                    "/admin/api/faqs",
+                    "PUT",
+                    { id: editingId, question, answer }
+                );
+                showMessage("FAQ updated successfully.");
+            }
+
+            resetForm();
+            loadFAQs();
+
+        } catch (error) {
+            showMessage(error.message);
+        }
+    });
+
+    function resetForm() {
+        editingId = null;
+        faqForm.reset();
+
+        document.getElementById("formTitle").textContent =
+            "Add a New FAQ";
+
+        document.getElementById("saveButton").textContent =
+            "Save FAQ";
+
+        document.getElementById("cancelButton").hidden = true;
+    }
+
+    document.getElementById("cancelButton").addEventListener(
+        "click", resetForm
+    );
+
+    async function loadActivity() {
+        const activityList = document.getElementById("activityList");
+
+        try {
+            const response = await fetch("/admin/api/logs");
+            if (!response.ok) throw new Error("Could not load activity");
+
+            const logs = await response.json();
+            activityList.replaceChildren();
+
+            if (!logs.length) {
+                activityList.textContent = "No activity recorded yet.";
+                return;
+            }
+
+            logs.forEach(log => {
+                const entry = document.createElement("p");
+                entry.textContent =
+                    `${log.created_at} — ${log.action}: ${log.details}`;
+                activityList.appendChild(entry);
+            });
+
+        } catch (error) {
+            activityList.textContent = error.message;
+        }
+    }
+
+    loadFAQs();
+    loadActivity();
+</script>
+
+</body>
+</html>
